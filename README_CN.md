@@ -74,17 +74,32 @@ python main.py serve
 
 ### 6. 运行评测
 
+**重要**：请确保使用项目实际安装依赖的 Python 环境，不要使用系统默认 Python。
+
 ```bash
-# 语法检查
+# 推荐测试命令（按顺序执行）
+
+# 1. 语法检查
 node --check ui/static/app.js
 python -c "import py_compile; py_compile.compile('api/fastapi_app.py', doraise=True)"
 
-# 测试
-pytest tests/
+# 2. 运行测试（静默模式）
+pytest tests/ -q
 
-# Golden Set 评测
+# 3. Golden Set 评测
 python eval/run_golden_eval.py
+
+# 4. 数据清理工具（预览模式）
+python scripts/clean_product_data.py --all-demo --dry-run
+
+# 5. 生成演示数据
+python scripts/seed_demo_data.py
 ```
+
+**环境说明**：
+- 如果 `python` 指向系统默认路径（如 WindowsApps），请使用项目虚拟环境的 Python
+- 推荐使用 `venv` 或 `conda` 环境
+- 确保已安装 `requirements.txt` 中的依赖
 
 ## 数据说明
 

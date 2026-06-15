@@ -212,11 +212,28 @@ def import_manual_jd(job_name: str, jd_text: str, title: str = "", company: str 
         result.blocked_reason = "JD 文本不能为空"
         return result
 
+    # 检测明显乱码（连续非中文非英文非标点字符）
+    import re
+    cleaned = jd_text.strip()
+    # 检查是否包含中文字符（正常 JD 应该有中文）
+    has_chinese = bool(re.search(r'[一-鿿]', cleaned))
+    # 检查乱码特征：连续特殊字符
+    garbled_pattern = re.compile(r'[\x00-\x08\x0e-\x1f]{3,}')
+    if garbled_pattern.search(cleaned):
+        result.blocked_reason = "检测到文本编码异常（乱码），请确保使用 UTF-8 编码"
+        result.warnings.append("建议直接从浏览器复制 JD 文本，避免从 PowerShell 等非 UTF-8 终端粘贴")
+        return result
+
+    # 如果文本很短且没有中文，可能是编码问题
+    if len(cleaned) < 50 and not has_chinese:
+        result.blocked_reason = "JD 文本过短或可能包含编码问题，请检查后重试"
+        return result
+
     jd_items = [{
         "title": title or f"{job_name} - 手动导入",
         "company": company or "",
         "url": "",
-        "content": jd_text.strip(),
+        "content": cleaned,
     }]
 
     # 质量过滤

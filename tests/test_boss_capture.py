@@ -865,3 +865,136 @@ def test_capture_result_has_job_profile_fields():
         assert "responsibilities" in profile
         assert "confidence" in profile
         assert "sample_count" in profile
+
+
+# ── v0.34 candidate_profiles/analyze user_id=0 修复测试 ──
+
+def test_candidate_profile_analyze_user_id_zero():
+    """/candidate_profiles/analyze 在 user_id=0 时不应 500"""
+    from api.fastapi_app import app
+    from fastapi.testclient import TestClient
+    c = TestClient(app)
+
+    resume_text = "张三，本科计算机专业，3年Python开发经验。技能：Python、FastAPI、MySQL。项目：开发了求职分析平台。"
+
+    r = c.post("/candidate_profiles/analyze", json={
+        "user_id": 0,
+        "resume_text": resume_text,
+    })
+
+    # 不应返回 500
+    assert r.status_code != 500, f"Expected non-500, got {r.status_code}: {r.text}"
+
+    # 应返回 200
+    assert r.status_code == 200
+    data = r.json()
+    assert data["code"] == 200
+    assert "candidate_profile_id" in data
+    assert data["candidate_profile_id"] > 0
+
+
+def test_candidate_profile_analyze_user_id_zero_has_valid_profile():
+    """/candidate_profiles/analyze user_id=0 返回有效的候选人画像"""
+    from api.fastapi_app import app
+    from fastapi.testclient import TestClient
+    c = TestClient(app)
+
+    resume_text = "李四，硕士人工智能专业。技能：Python、PyTorch、TensorFlow。项目：基于Transformer的文本分类系统。"
+
+    r = c.post("/candidate_profiles/analyze", json={
+        "user_id": 0,
+        "resume_text": resume_text,
+    })
+
+    assert r.status_code == 200
+    data = r.json()
+    assert data["code"] == 200
+    assert "profile" in data
+    profile = data["profile"]
+    assert "skill_stack" in profile
+    assert len(profile["skill_stack"]) > 0
+
+
+def test_candidate_profile_analyze_chinese_resume():
+    """中文简历能正常解析"""
+    from api.fastapi_app import app
+    from fastapi.testclient import TestClient
+    c = TestClient(app)
+
+    resume_text = """王五，本科软件工程专业，2020年毕业。
+技能：JavaScript、Vue、HTML5、CSS3、Webpack。
+项目：使用Vue开发电商管理后台，首屏加载从3秒优化到1.2秒。
+工作经历：在某公司担任前端开发工程师。"""
+
+    r = c.post("/candidate_profiles/analyze", json={
+        "user_id": _ensure_test_user(),
+        "resume_text": resume_text,
+    })
+
+    assert r.status_code == 200
+    data = r.json()
+    assert data["code"] == 200
+    assert data["candidate_profile_id"] > 0
+
+
+# ── v0.34 JD 导入健壮性测试 ──
+
+def test_manual_import_chinese_jd_success():
+    """正常中文 JD 导入成功"""
+    import time
+    from services.boss_capture_service import import_manual_jd
+
+    # 使用唯一文本避免去重
+    jd_text = f"""岗位职责：
+1. 负责公司核心业务系统的后端开发与维护
+2. 参与系统架构设计与优化
+3. 编写高质量代码，进行代码审查
+
+任职要求：
+1. 计算机相关专业本科及以上学历
+2. 3年以上Python后端开发经验
+3. 熟悉Python、FastAPI、MySQL、Redis
+4. 具备良好的沟通协作能力
+
+唯一标识: {time.time()}"""
+
+    result = import_manual_jd("Python后端", jd_text, title="测试JD", company="测试公司")
+    assert result.imported_count >= 1 or result.skipped_count >= 1
+    assert result.blocked_reason == ""
+
+
+def test_manual_import_short_text_filtered():
+    """过短 JD 被过滤"""
+    from services.boss_capture_service import import_manual_jd
+
+    result = import_manual_jd("测试岗位", "太短了")
+    # 过短文本应被过滤或返回警告
+    assert result.imported_count == 0 or len(result.warnings) > 0
+
+
+def test_manual_import_empty_text_blocked():
+    """空文本返回 blocked_reason"""
+    from services.boss_capture_service import import_manual_jd
+
+    result = import_manual_jd("测试岗位", "")
+    assert result.blocked_reason != ""
+
+
+def test_manual_import_garbled_text_blocked():
+    """乱码文本返回 blocked_reason"""
+    from services.boss_capture_service import import_manual_jd
+
+    # 模拟乱码
+    garbled = "\x00\x01\x02\x03\x04\x05" * 10
+    result = import_manual_jd("测试岗位", garbled)
+    assert result.blocked_reason != ""
+
+
+def test_manual_import_no_requirements_filtered():
+    """无职责要求的 JD 被过滤"""
+    from services.boss_capture_service import import_manual_jd
+
+    jd_text = "这是一家很好的公司，福利待遇好，五险一金，年终奖，带薪年假。" * 10
+    result = import_manual_jd("测试岗位", jd_text)
+    # 无职责要求的 JD 应被过滤
+    assert result.imported_count == 0 or len(result.warnings) > 0

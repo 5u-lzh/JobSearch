@@ -631,9 +631,9 @@ cite-warn{color:var(--gold);font-size:0.55rem;margin-left:3px;}
   border-bottom:1px solid var(--border);
 }
 .boss-capture-body{
-  padding:0.8rem 1rem;transition:max-height 0.3s ease,opacity 0.25s ease;
+  padding:0.8rem 1rem;overflow:visible;
 }
-.boss-capture-body.collapsed{max-height:0;opacity:0;padding:0 1rem;overflow:hidden;}
+.boss-capture-body.collapsed{display:none;}
 .boss-browser-controls{
   display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;
   padding:0.6rem 0;border-bottom:1px solid var(--border);margin-bottom:0.6rem;

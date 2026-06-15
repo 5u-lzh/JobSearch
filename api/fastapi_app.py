@@ -520,7 +520,7 @@ def get_job_profile(profile_id: int):
 
 # ── 候选人画像 ──
 class CandidateProfileRequest(BaseModel):
-    user_id: int
+    user_id: int = 0
     resume_text: str = ""
     resume_filename: str = ""
     conversation_text: str = ""
@@ -529,13 +529,21 @@ class CandidateProfileRequest(BaseModel):
 @app.post("/candidate_profiles/analyze")
 def analyze_candidate_profile(request: CandidateProfileRequest):
     from services.candidate_profile_service import extract_candidate_profile, save_candidate_profile
+    from memory.long_term import get_or_create_user
+
+    # 自动处理 user_id=0 的情况
+    uid = request.user_id
+    if not uid:
+        uid = get_or_create_user("default_user")
+        logger.info(f"user_id=0, auto-created default user: {uid}")
+
     profile = extract_candidate_profile(
         resume_text=request.resume_text,
-        user_id=request.user_id,
+        user_id=uid,
         resume_filename=request.resume_filename,
         conversation_text=request.conversation_text,
     )
-    profile_id = save_candidate_profile(profile, user_id=request.user_id, resume_filename=request.resume_filename)
+    profile_id = save_candidate_profile(profile, user_id=uid, resume_filename=request.resume_filename)
     return {"code": 200, "candidate_profile_id": profile_id, "profile": profile.model_dump()}
 
 
