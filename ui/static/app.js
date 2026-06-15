@@ -670,17 +670,40 @@ function updateFitSummaries(){
   }
 }
 
+const _QUALITY_FLAG_CN={
+  low_sample_count:'样本较少',
+  low_valid_ratio:'有效样本比例过低',
+  low_quality_jds:'JD 整体质量偏低',
+  missing_responsibilities:'缺少职责证据',
+  missing_requirements:'缺少明确技能要求',
+  mixed_experience_requirement:'经验要求存在冲突',
+  mixed_employment_type:'用工类型不一致',
+  short_jd_text:'JD 文本较短',
+  fallback_only:'仅采集到卡片信息',
+  detail_missing:'未采集到完整 JD',
+  有效样本不足:'有效样本不足',
+  有效样本比例过低:'有效样本比例过低',
+  未提取到明确技能要求:'未提取到明确技能要求',
+  JD整体质量偏低:'JD 整体质量偏低',
+};
+
+function qualityFlagToCN(flag){
+  return _QUALITY_FLAG_CN[flag]||flag;
+}
+
 function renderJobProfileCard(p){
   const container=$('jobProfileCard');
   if(!container||!p)return;
   const np=normalizeJobProfile(p);
   let h='<div class="job-profile-card-full">';
 
-  // 基本定位
+  // 顶部摘要
   h+='<div class="profile-section">';
-  h+='<div class="profile-section-title">岗位定位</div>';
+  h+='<div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.5rem;">';
+  h+='<span style="font-size:1rem;font-weight:800;">'+esc(np.job_name)+'</span>';
+  h+='<span class="profile-confidence '+np.confidence+'">'+esc(np.confidence)+' 置信度</span>';
+  h+='</div>';
   h+='<div class="profile-kv-grid">';
-  h+='<div class="profile-kv-item"><span>岗位类型</span><b>'+esc(np.job_type)+'</b></div>';
   h+='<div class="profile-kv-item"><span>用工类型</span><b>'+esc(np.employment_type)+'</b></div>';
   h+='<div class="profile-kv-item"><span>面向人群</span><b>'+esc(np.target_audience)+'</b></div>';
   h+='<div class="profile-kv-item"><span>样本来源</span><b>'+np.valid_sample_count+' 条 JD / 有效 '+np.valid_sample_count+' / 过滤 '+np.filtered_sample_count+'</b></div>';
@@ -713,13 +736,13 @@ function renderJobProfileCard(p){
     h+='</div></div>';
   }
 
-  // 要求
+  // 要求摘要
   h+='<div class="profile-section">';
   h+='<div class="profile-section-title">要求</div>';
   h+='<div class="profile-kv-grid">';
-  h+='<div class="profile-kv-item"><span>学历</span><b>'+esc(np.education_preference)+'</b></div>';
-  h+='<div class="profile-kv-item"><span>专业</span><b>'+esc(np.major_preference)+'</b></div>';
-  h+='<div class="profile-kv-item"><span>经验</span><b>'+esc(np.experience_requirement)+'</b></div>';
+  h+='<div class="profile-kv-item"><span>学历</span><b>'+esc(np.education_preference||'不明确')+'</b></div>';
+  h+='<div class="profile-kv-item"><span>专业</span><b>'+esc(np.major_preference||'不明确')+'</b></div>';
+  h+='<div class="profile-kv-item"><span>经验</span><b>'+esc(np.experience_requirement||'不明确')+'</b></div>';
   h+='</div></div>';
 
   // 业务场景
@@ -731,15 +754,23 @@ function renderJobProfileCard(p){
     h+='</div></div>';
   }
 
-  // 置信度
-  h+='<div class="profile-section">';
-  h+='<span class="profile-confidence '+np.confidence+'">'+esc(np.confidence)+' 置信度</span>';
-  if(np.quality_flags.length){
-    h+='<div style="margin-top:0.3rem;font-size:0.68rem;color:var(--gold);">';
-    np.quality_flags.forEach(f=>{h+='• '+esc(f)+' ';});
-    h+='</div>';
+  // 成长信号
+  if(np.growth_context.length){
+    h+='<div class="profile-section">';
+    h+='<div class="profile-section-title">成长信号</div>';
+    h+='<div class="profile-chip-row">';
+    np.growth_context.slice(0,3).forEach(s=>{h+='<span class="profile-chip">'+esc(s)+'</span>';});
+    h+='</div></div>';
   }
-  h+='</div>';
+
+  // 质量提示
+  if(np.quality_flags.length){
+    h+='<div class="profile-section">';
+    h+='<div style="padding:0.5rem 0.7rem;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);border-radius:var(--radius-sm);">';
+    h+='<div style="font-size:0.68rem;font-weight:600;color:var(--gold);margin-bottom:0.3rem;">⚠ 质量提示</div>';
+    np.quality_flags.forEach(f=>{h+='<div style="font-size:0.65rem;color:var(--text-dim);">• '+esc(qualityFlagToCN(f))+'</div>';});
+    h+='</div></div>';
+  }
 
   h+='</div>';
   container.innerHTML=h;

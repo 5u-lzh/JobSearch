@@ -16,6 +16,8 @@
       "experience_requirement": "3年以上",
       "education_preference": "本科",
       "major_preference": "计算机",
+      "business_context_keywords": ["后台系统"],
+      "growth_context_keywords": [],
       "evidence_keywords": ["后端开发", "Python", "数据库"]
     },
     "gold_candidate_profile": {
@@ -53,6 +55,8 @@
       "experience_requirement": "2年以上",
       "education_preference": "本科",
       "major_preference": "",
+      "business_context_keywords": ["AI 应用", "大模型应用"],
+      "growth_context_keywords": ["从0到1"],
       "evidence_keywords": ["AI产品", "产品规划", "需求分析"]
     },
     "gold_candidate_profile": {
@@ -90,6 +94,8 @@
       "experience_requirement": "2年以上",
       "education_preference": "本科",
       "major_preference": "计算机",
+      "business_context_keywords": [],
+      "growth_context_keywords": [],
       "evidence_keywords": ["前端", "React", "组件化"]
     },
     "gold_candidate_profile": {
@@ -127,6 +133,8 @@
       "experience_requirement": "",
       "education_preference": "本科",
       "major_preference": "统计学、数学、计算机",
+      "business_context_keywords": ["数据平台"],
+      "growth_context_keywords": [],
       "evidence_keywords": ["数据处理", "分析报告", "SQL"]
     },
     "gold_candidate_profile": {
@@ -164,6 +172,8 @@
       "experience_requirement": "3年以上",
       "education_preference": "本科",
       "major_preference": "电子、通信、自动化",
+      "business_context_keywords": ["嵌入式/硬件"],
+      "growth_context_keywords": [],
       "evidence_keywords": ["嵌入式", "C语言", "硬件"]
     },
     "gold_candidate_profile": {

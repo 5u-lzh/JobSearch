@@ -87,7 +87,7 @@ def _evaluate_case(case: dict, job_profile: dict, candidate_profile: dict, fit_r
     gold_cand = case.get("gold_candidate_profile", {})
     gold_fit = case.get("gold_fit", {})
 
-    # 岗位画像评估
+    # ── 岗位画像评估（原有） ──
     jp_must_hit, jp_must_miss = _keyword_hit_rate(
         gold_job.get("must_have_capabilities", []),
         job_profile.get("must_have_capabilities", []),
@@ -98,7 +98,59 @@ def _evaluate_case(case: dict, job_profile: dict, candidate_profile: dict, fit_r
     )
     job_profile_score = round((jp_must_hit * 0.7 + jp_resp_hit * 0.3) * 100, 1)
 
-    # 候选人画像评估
+    # ── 岗位画像细分指标（v0.28 新增） ──
+    jp_nice_hit, jp_nice_miss = _keyword_hit_rate(
+        gold_job.get("nice_to_have_capabilities", []),
+        job_profile.get("nice_to_have_capabilities", []),
+    )
+    jp_biz_hit, jp_biz_miss = _keyword_hit_rate(
+        gold_job.get("business_context_keywords", []),
+        job_profile.get("business_context", []),
+    )
+    jp_growth_hit, jp_growth_miss = _keyword_hit_rate(
+        gold_job.get("growth_context_keywords", []),
+        job_profile.get("growth_context", []),
+    )
+
+    # employment_type 匹配
+    gold_emp = gold_job.get("employment_type", "")
+    actual_emp = job_profile.get("employment_type", "")
+    emp_match = (gold_emp == actual_emp) if gold_emp else True
+
+    # target_audience 匹配
+    gold_aud = gold_job.get("target_audience", "")
+    actual_aud = job_profile.get("target_audience", "")
+    aud_match = (gold_aud == actual_aud) if gold_aud else True
+
+    # requirement 综合命中率（education / major / experience）
+    req_hits = 0
+    req_total = 0
+    gold_edu = gold_job.get("education_preference", "")
+    if gold_edu:
+        req_total += 1
+        if gold_edu in (job_profile.get("education_preference", "") or ""):
+            req_hits += 1
+    gold_major = gold_job.get("major_preference", "")
+    if gold_major:
+        req_total += 1
+        actual_major = job_profile.get("major_preference", "") or ""
+        if any(m in actual_major for m in gold_major.split("、") if m):
+            req_hits += 1
+    gold_exp = gold_job.get("experience_requirement", "")
+    if gold_exp:
+        req_total += 1
+        if gold_exp in (job_profile.get("experience_requirement", "") or ""):
+            req_hits += 1
+    req_match_rate = round(req_hits / max(1, req_total), 3)
+
+    # evidence_coverage
+    evidence_count = len(job_profile.get("evidence", []))
+    has_resp = len(job_profile.get("responsibilities", [])) > 0
+    has_must = len(job_profile.get("must_have_capabilities", [])) > 0
+    has_biz = len(job_profile.get("business_context", [])) > 0
+    evidence_coverage = round(sum([has_resp, has_must, has_biz]) / 3, 3)
+
+    # ── 候选人画像评估 ──
     cand_skill_hit, cand_skill_miss = _keyword_hit_rate(
         gold_cand.get("skill_keywords", []),
         candidate_profile.get("skill_stack", []),
@@ -116,14 +168,12 @@ def _evaluate_case(case: dict, job_profile: dict, candidate_profile: dict, fit_r
     )
     candidate_score = round((cand_skill_hit * 0.4 + cand_proj_hit * 0.4 + cand_achieve_hit * 0.2) * 100, 1)
 
-    # 适配分析评估
+    # ── 适配分析评估 ──
     actual_level = fit_report.get("overall_fit_level", "moderate")
     gold_level = gold_fit.get("overall_fit_level", "moderate")
     fit_level_match = actual_level == gold_level
-    # near_match: strong/moderate 之间算近似，weak 与其他不算
     _near_set = {("strong", "moderate"), ("moderate", "strong")}
     fit_level_near_match = (actual_level, gold_level) in _near_set
-    # mismatch_reason
     mismatch_reason = ""
     if not fit_level_match:
         mismatch_reason = f"gold={gold_level}, actual={actual_level}, score={fit_report.get('overall_score', '?')}"
@@ -141,7 +191,7 @@ def _evaluate_case(case: dict, job_profile: dict, candidate_profile: dict, fit_r
         fit_report.get("learning_plan", []),
     )
 
-    # 幻觉标记：系统输出中有 gold 里没有的关键词
+    # 幻觉标记
     hallucination_flags = []
     sys_must = set(s.lower() for s in job_profile.get("must_have_capabilities", []))
     gold_must = set(s.lower() for s in gold_job.get("must_have_capabilities", []))
@@ -157,6 +207,18 @@ def _evaluate_case(case: dict, job_profile: dict, candidate_profile: dict, fit_r
         "score": total_score,
         "job_profile_score": job_profile_score,
         "candidate_profile_score": candidate_score,
+        # v0.28 字段级指标
+        "field_scores": {
+            "responsibilities_hit_rate": round(jp_resp_hit * 100, 1),
+            "must_have_hit_rate": round(jp_must_hit * 100, 1),
+            "nice_to_have_hit_rate": round(jp_nice_hit * 100, 1),
+            "business_context_hit_rate": round(jp_biz_hit * 100, 1),
+            "growth_context_hit_rate": round(jp_growth_hit * 100, 1),
+            "employment_type_match": emp_match,
+            "target_audience_match": aud_match,
+            "requirement_match_rate": round(req_match_rate * 100, 1),
+            "evidence_coverage": round(evidence_coverage * 100, 1),
+        },
         "fit_level_match": fit_level_match,
         "fit_level_near_match": fit_level_near_match,
         "actual_fit_level": actual_level,
@@ -167,6 +229,8 @@ def _evaluate_case(case: dict, job_profile: dict, candidate_profile: dict, fit_r
         "missed_keywords": {
             "job_must_have": jp_must_miss,
             "job_responsibilities": jp_resp_miss,
+            "job_nice_to_have": jp_nice_miss,
+            "job_business_context": jp_biz_miss,
             "candidate_skills": cand_skill_miss,
             "candidate_projects": cand_proj_miss,
             "fit_strengths": strengths_miss,
@@ -233,6 +297,15 @@ def run_golden_eval(use_agent: bool = False, limit: int = 0, output: str = None)
     avg_cand = round(sum(r["candidate_profile_score"] for r in results) / max(1, total), 1)
     fit_match_rate = round(sum(1 for r in results if r["fit_level_match"]) / max(1, total) * 100, 1)
 
+    # v0.28 字段级平均指标
+    def _avg_field(key):
+        vals = [r["field_scores"][key] for r in results if "field_scores" in r and key in r["field_scores"]]
+        return round(sum(vals) / max(1, len(vals)), 1) if vals else 0
+
+    def _avg_field_bool(key):
+        vals = [r["field_scores"][key] for r in results if "field_scores" in r and key in r["field_scores"]]
+        return round(sum(1 for v in vals if v) / max(1, len(vals)) * 100, 1) if vals else 0
+
     summary = {
         "total_cases": total,
         "passed": passed,
@@ -242,6 +315,16 @@ def run_golden_eval(use_agent: bool = False, limit: int = 0, output: str = None)
         "avg_job_profile_score": avg_job,
         "avg_candidate_profile_score": avg_cand,
         "fit_level_match_rate": fit_match_rate,
+        # v0.28 字段级指标
+        "avg_responsibilities_hit_rate": _avg_field("responsibilities_hit_rate"),
+        "avg_must_have_hit_rate": _avg_field("must_have_hit_rate"),
+        "avg_nice_to_have_hit_rate": _avg_field("nice_to_have_hit_rate"),
+        "avg_business_context_hit_rate": _avg_field("business_context_hit_rate"),
+        "avg_growth_context_hit_rate": _avg_field("growth_context_hit_rate"),
+        "employment_type_match_rate": _avg_field_bool("employment_type_match"),
+        "target_audience_match_rate": _avg_field_bool("target_audience_match"),
+        "avg_requirement_match_rate": _avg_field("requirement_match_rate"),
+        "avg_evidence_coverage": _avg_field("evidence_coverage"),
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "use_agent": use_agent,
     }
@@ -263,6 +346,16 @@ def run_golden_eval(use_agent: bool = False, limit: int = 0, output: str = None)
     print(f"  岗位画像平均分: {avg_job}")
     print(f"  候选人画像平均分: {avg_cand}")
     print(f"  适配等级匹配率: {fit_match_rate}%")
+    print(f"  --- 字段级指标 ---")
+    print(f"  职责命中率: {summary['avg_responsibilities_hit_rate']}%")
+    print(f"  必备能力命中率: {summary['avg_must_have_hit_rate']}%")
+    print(f"  加分能力命中率: {summary['avg_nice_to_have_hit_rate']}%")
+    print(f"  业务场景命中率: {summary['avg_business_context_hit_rate']}%")
+    print(f"  成长信号命中率: {summary['avg_growth_context_hit_rate']}%")
+    print(f"  用工类型匹配率: {summary['employment_type_match_rate']}%")
+    print(f"  面向人群匹配率: {summary['target_audience_match_rate']}%")
+    print(f"  要求匹配率: {summary['avg_requirement_match_rate']}%")
+    print(f"  证据覆盖率: {summary['avg_evidence_coverage']}%")
     print(f"  报告: {out_path}")
     print(f"{'='*50}")
 
