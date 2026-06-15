@@ -49,6 +49,7 @@ let currentRuleScore=0;
 let profileAnalysisLoading=false;
 let profileAnalysisError='';
 let parsedResumeText='';  // 上传文件解析出的简历文本
+let bossCaptureResult=null;  // Boss 采集结果
 
 // ── API ──
 const api={
@@ -79,6 +80,13 @@ const api={
   async getFitReport(id,uid=0){const p=new URLSearchParams();if(uid)p.set('user_id',uid);const qs=p.toString();const r=await fetch('/fit_analysis_reports/'+id+(qs?'?'+qs:''));return r.json();},
   async deleteFitReport(id){const r=await fetch('/fit_analysis_reports/'+id+'?user_id='+userId,{method:'DELETE'});return r.json();},
   async rerunFitReport(id){const r=await fetch('/fit_analysis_reports/'+id+'/rerun',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:userId})});return r.json();},
+  async bossCapture(jobName,city,maxJobs,filters){const r=await fetch('/jd_sources/boss/capture',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({job_name:jobName,city,max_jobs:maxJobs,filters})});return r.json();},
+  async bossManualImport(jobName,jdText,title,company){const r=await fetch('/jd_sources/boss/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({job_name:jobName,jd_text:jdText,title:title||'',company:company||''})});return r.json();},
+  async rebuildJobProfile(jobName,sourcePlatform,topN){const r=await fetch('/job_profiles/rebuild',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({job_name:jobName,source_platform:sourcePlatform||'boss',top_n:topN||20})});return r.json();},
+  async startBossBrowser(){const r=await fetch('/boss/browser/start',{method:'POST'});return r.json();},
+  async stopBossBrowser(){const r=await fetch('/boss/browser/stop',{method:'POST'});return r.json();},
+  async getBossBrowserStatus(){const r=await fetch('/boss/browser/status');return r.json();},
+  async openBossLogin(){const r=await fetch('/boss/browser/open-login',{method:'POST'});return r.json();},
 };
 
 function lastThreadKey(uid=userId){return 'last_thread_id_'+uid;}
@@ -111,6 +119,14 @@ const el={
   researchInput:$('researchInput'),btnResearch:$('btnResearch'),researchTimeline:$('researchTimeline'),researchBody:$('researchBody'),
   userAvatar:$('userAvatar'),userName:$('userName'),userMeta:$('userMeta'),userStats:$('userStats'),
   insightContent:$('insightContent'),toastContainer:$('toastContainer'),
+  btnToggleBossCapture:$('btnToggleBossCapture'),bossCaptureBody:$('bossCaptureBody'),
+  bossJobInput:$('bossJobInput'),bossCityInput:$('bossCityInput'),
+  bossExpFilter:$('bossExpFilter'),bossEduFilter:$('bossEduFilter'),bossMaxJobs:$('bossMaxJobs'),
+  btnBossCapture:$('btnBossCapture'),bossManualJdInput:$('bossManualJdInput'),
+  btnBossManualImport:$('btnBossManualImport'),bossCaptureStatus:$('bossCaptureStatus'),
+  btnRebuildProfile:$('btnRebuildProfile'),
+  btnStartBrowser:$('btnStartBrowser'),btnStopBrowser:$('btnStopBrowser'),
+  btnRetryAfterLogin:$('btnRetryAfterLogin'),bossBrowserStatus:$('bossBrowserStatus'),
 };
 
 // ── 视图切换 ──
@@ -123,7 +139,7 @@ function switchView(v){
   const tgt=document.getElementById(viewMap[v]||'viewChat');
   if(tgt)tgt.classList.add('active');
   if(v==='radar')loadRadarQuickTags();
-  if(v==='gap'){loadGapQuickTags();loadFitReportHistory();}
+  if(v==='gap'){loadGapQuickTags();loadFitReportHistory();updateGapStepper();}
   if(v==='user')loadUserCenter();
 }
 document.querySelectorAll('.nav-icon').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
@@ -373,13 +389,18 @@ async function extractResumeProfile(){
       if(res.code===200){
         currentCandidateProfile=res.profile;
         renderProfileSkills(res.profile);
+        renderCandidateProfileCard(res.profile);
+        updateGapStepper();
         toast('候选人画像已生成');
       }
     }else{
       parsedResumeText=text;
       const res=await api.resumeProfileText(text);
       if(res.code!==200)throw new Error(res.detail||'简历解析失败');
+      currentCandidateProfile=res.profile;
       renderProfileSkills(res.profile);
+      renderCandidateProfileCard(res.profile);
+      updateGapStepper();
       toast('技能画像已生成');
     }
   }catch(e){
@@ -388,6 +409,31 @@ async function extractResumeProfile(){
   }finally{
     el.btnResumeProfile.disabled=false;
   }
+}
+
+function renderCandidateProfileCard(profile){
+  const container=$('candidateProfileCard');
+  if(!container||!profile)return;
+  const skills=(profile.skill_stack||[]).map(s=>typeof s==='string'?s:(s?.skill||''));
+  let h='<div class="job-profile-card-full" style="border-top-color:var(--green);">';
+  h+='<div class="profile-section">';
+  h+='<div class="profile-section-title">候选人画像</div>';
+  h+='<div class="profile-kv-grid">';
+  const edu=profile.education_background||{};
+  h+='<div class="profile-kv-item"><span>学历</span><b>'+esc(edu.degree||'未识别')+'</b></div>';
+  h+='<div class="profile-kv-item"><span>专业</span><b>'+esc(edu.major||'未识别')+'</b></div>';
+  h+='<div class="profile-kv-item"><span>技能数</span><b>'+skills.length+'</b></div>';
+  h+='<div class="profile-kv-item"><span>置信度</span><b>'+esc(profile.confidence||'low')+'</b></div>';
+  h+='</div></div>';
+  if(skills.length){
+    h+='<div class="profile-section">';
+    h+='<div class="profile-section-title">技能栈</div>';
+    h+='<div class="profile-chip-row">';
+    skills.slice(0,15).forEach(s=>{h+='<span class="profile-chip must">'+esc(s)+'</span>';});
+    h+='</div></div>';
+  }
+  h+='</div>';
+  container.innerHTML=h;
 }
 function skillTitle(item){return typeof item==='string'?item:(item?.skill||'');}
 function marketRate(item,total=gapTotalJds){
@@ -547,6 +593,370 @@ function collectGapSkills(){
   const extra=normalizeSkillText(el.gapExtraInput.value);
   return [...new Set([...selected,...extra])];
 }
+
+// ── v0.26 normalizeJobProfile ──
+function normalizeJobProfile(p){
+  if(!p)return null;
+  return {
+    job_name:p.job_name||'',
+    job_type:p.job_type||'未知',
+    employment_type:p.employment_type||'未知',
+    target_audience:p.target_audience||'未明确',
+    responsibilities:p.responsibilities||[],
+    must_have:p.must_have_capabilities||p.must_have||[],
+    nice_to_have:p.nice_to_have_capabilities||p.nice_to_have||[],
+    education_preference:p.education_preference||'未明确',
+    major_preference:p.major_preference||'未明确',
+    experience_requirement:p.experience_requirement||'未明确',
+    business_context:p.business_context||[],
+    growth_context:p.growth_context||[],
+    confidence:p.confidence||'low',
+    quality_flags:p.quality_flags||[],
+    sample_count:p.sample_count||0,
+    valid_sample_count:p.valid_sample_count||p.sample_count||0,
+    filtered_sample_count:p.filtered_sample_count||0,
+    _id:p.id||p.job_profile_id||0,
+  };
+}
+
+// ── v0.26 Tab 切换 ──
+function switchGapTab(tabName){
+  document.querySelectorAll('.gap-tab').forEach(t=>
+    t.classList.toggle('active',t.dataset.tab===tabName));
+  const panelMap={capture:'tabCapture',resume:'tabResume',fit:'tabFit',history:'tabHistory'};
+  document.querySelectorAll('.gap-tab-panel').forEach(p=>
+    p.classList.toggle('active',p.id===panelMap[tabName]));
+  if(tabName==='history')loadFitReportHistory();
+  if(tabName==='fit')updateFitSummaries();
+}
+
+function updateGapStepper(){
+  const steps=document.querySelectorAll('#gapStepper .step');
+  if(!steps.length)return;
+  steps[0].classList.toggle('done',!!currentJobProfile);
+  steps[0].classList.toggle('active',!currentJobProfile);
+  steps[1].classList.toggle('done',!!currentCandidateProfile);
+  steps[1].classList.toggle('active',!!currentJobProfile&&!currentCandidateProfile);
+  steps[2].classList.toggle('done',!!currentFitReport);
+  steps[2].classList.toggle('active',!!currentJobProfile&&!!currentCandidateProfile&&!currentFitReport);
+}
+
+function updateFitSummaries(){
+  const jobCard=$('fitJobSummary');
+  const candCard=$('fitCandSummary');
+  if(jobCard){
+    if(currentJobProfile){
+      const p=normalizeJobProfile(currentJobProfile);
+      jobCard.className='fit-summary-card has-data';
+      jobCard.innerHTML='<div class="gap-label">岗位画像</div>'
+        +'<div style="font-size:0.82rem;font-weight:700;margin:0.3rem 0;">'+esc(p.job_name)+'</div>'
+        +'<div style="font-size:0.7rem;color:var(--text-dim);">'+esc(p.job_type)+' · '+esc(p.employment_type)+'</div>'
+        +'<div style="font-size:0.7rem;color:var(--text-dim);">样本 '+p.valid_sample_count+' 条 · 置信度 '+esc(p.confidence)+'</div>';
+    }else{
+      jobCard.className='fit-summary-card';
+      jobCard.innerHTML='<div class="gap-label">岗位画像</div><div class="gap-subtle">请先完成岗位采集</div>';
+    }
+  }
+  if(candCard){
+    if(currentCandidateProfile){
+      const skills=(currentCandidateProfile.skill_stack||[]).length;
+      candCard.className='fit-summary-card has-cand';
+      candCard.innerHTML='<div class="gap-label">候选人画像</div>'
+        +'<div style="font-size:0.7rem;color:var(--text-dim);margin-top:0.3rem;">识别 '+skills+' 项技能</div>';
+    }else{
+      candCard.className='fit-summary-card';
+      candCard.innerHTML='<div class="gap-label">候选人画像</div><div class="gap-subtle">请先上传简历</div>';
+    }
+  }
+}
+
+function renderJobProfileCard(p){
+  const container=$('jobProfileCard');
+  if(!container||!p)return;
+  const np=normalizeJobProfile(p);
+  let h='<div class="job-profile-card-full">';
+
+  // 基本定位
+  h+='<div class="profile-section">';
+  h+='<div class="profile-section-title">岗位定位</div>';
+  h+='<div class="profile-kv-grid">';
+  h+='<div class="profile-kv-item"><span>岗位类型</span><b>'+esc(np.job_type)+'</b></div>';
+  h+='<div class="profile-kv-item"><span>用工类型</span><b>'+esc(np.employment_type)+'</b></div>';
+  h+='<div class="profile-kv-item"><span>面向人群</span><b>'+esc(np.target_audience)+'</b></div>';
+  h+='<div class="profile-kv-item"><span>样本来源</span><b>'+np.valid_sample_count+' 条 JD / 有效 '+np.valid_sample_count+' / 过滤 '+np.filtered_sample_count+'</b></div>';
+  h+='</div></div>';
+
+  // 核心职责
+  if(np.responsibilities.length){
+    h+='<div class="profile-section">';
+    h+='<div class="profile-section-title">核心职责</div>';
+    h+='<ul class="profile-resp-list">';
+    np.responsibilities.slice(0,6).forEach(r=>{h+='<li>'+esc(r)+'</li>';});
+    h+='</ul></div>';
+  }
+
+  // 必备能力
+  if(np.must_have.length){
+    h+='<div class="profile-section">';
+    h+='<div class="profile-section-title">必备能力</div>';
+    h+='<div class="profile-chip-row">';
+    np.must_have.forEach(s=>{h+='<span class="profile-chip must">'+esc(s)+'</span>';});
+    h+='</div></div>';
+  }
+
+  // 加分能力
+  if(np.nice_to_have.length){
+    h+='<div class="profile-section">';
+    h+='<div class="profile-section-title">加分能力</div>';
+    h+='<div class="profile-chip-row">';
+    np.nice_to_have.forEach(s=>{h+='<span class="profile-chip nice">'+esc(s)+'</span>';});
+    h+='</div></div>';
+  }
+
+  // 要求
+  h+='<div class="profile-section">';
+  h+='<div class="profile-section-title">要求</div>';
+  h+='<div class="profile-kv-grid">';
+  h+='<div class="profile-kv-item"><span>学历</span><b>'+esc(np.education_preference)+'</b></div>';
+  h+='<div class="profile-kv-item"><span>专业</span><b>'+esc(np.major_preference)+'</b></div>';
+  h+='<div class="profile-kv-item"><span>经验</span><b>'+esc(np.experience_requirement)+'</b></div>';
+  h+='</div></div>';
+
+  // 业务场景
+  if(np.business_context.length){
+    h+='<div class="profile-section">';
+    h+='<div class="profile-section-title">业务场景</div>';
+    h+='<div class="profile-chip-row">';
+    np.business_context.forEach(s=>{h+='<span class="profile-chip">'+esc(s)+'</span>';});
+    h+='</div></div>';
+  }
+
+  // 置信度
+  h+='<div class="profile-section">';
+  h+='<span class="profile-confidence '+np.confidence+'">'+esc(np.confidence)+' 置信度</span>';
+  if(np.quality_flags.length){
+    h+='<div style="margin-top:0.3rem;font-size:0.68rem;color:var(--gold);">';
+    np.quality_flags.forEach(f=>{h+='• '+esc(f)+' ';});
+    h+='</div>';
+  }
+  h+='</div>';
+
+  h+='</div>';
+  container.innerHTML=h;
+}
+
+// ── v0.25 Boss 岗位采集 ──
+let bossBrowserRunning=false;
+let bossBrowserLoggedIn=false;
+
+function updateBossBrowserUI(status){
+  if(!status)return;
+  bossBrowserRunning=status.running||false;
+  bossBrowserLoggedIn=status.logged_in||false;
+  const statusEl=el.bossBrowserStatus;
+  if(statusEl){
+    const statusText=status.status||'未启动';
+    const statusColor=status.running?(status.logged_in?'var(--green)':'var(--gold)'):'var(--text-muted)';
+    statusEl.innerHTML='浏览器: <span style="color:'+statusColor+'">'+esc(statusText)+'</span>';
+    if(status.message)statusEl.title=status.message;
+  }
+  // 按钮显隐
+  if(el.btnStartBrowser)el.btnStartBrowser.style.display=status.running?'none':'';
+  if(el.btnStopBrowser)el.btnStopBrowser.style.display=status.running?'':'none';
+  if(el.btnRetryAfterLogin)el.btnRetryAfterLogin.style.display=(status.running&&!status.logged_in)?'':'none';
+}
+
+async function refreshBossBrowserStatus(){
+  try{
+    const res=await api.getBossBrowserStatus();
+    if(res.code===200)updateBossBrowserUI(res);
+  }catch(_){}
+}
+
+async function startBossBrowser(){
+  if(!el.btnStartBrowser)return;
+  el.btnStartBrowser.disabled=true;
+  el.btnStartBrowser.textContent='启动中...';
+  el.bossCaptureStatus.innerHTML='<div style="display:flex;align-items:center;gap:0.5rem;"><div class="spinner" style="width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin 0.8s linear infinite;"></div><span>正在启动浏览器并打开 Boss 登录页...</span></div>';
+
+  try{
+    const res=await api.startBossBrowser();
+    if(res.code===200){
+      updateBossBrowserUI(res);
+      if(!res.logged_in){
+        el.bossCaptureStatus.innerHTML='<div class="capture-warning">⚠ 已打开 Boss 登录页，请在弹出的浏览器中扫码/验证登录，然后点击「我已完成登录，重试采集」</div>';
+      }else{
+        el.bossCaptureStatus.innerHTML='<div style="color:var(--green);font-size:0.75rem;">✓ Boss 浏览器已登录，可以开始采集</div>';
+      }
+      toast(res.message||'浏览器已启动');
+    }else{
+      toast('启动失败');
+    }
+  }catch(e){
+    toast('启动失败: '+e.message);
+  }finally{
+    el.btnStartBrowser.disabled=false;
+    el.btnStartBrowser.textContent='启动浏览器';
+  }
+}
+
+async function stopBossBrowser(){
+  if(!el.btnStopBrowser)return;
+  el.btnStopBrowser.disabled=true;
+  try{
+    const res=await api.stopBossBrowser();
+    if(res.code===200){
+      updateBossBrowserUI(res);
+      bossCaptureResult=null;
+      renderBossCaptureStatus(null);
+      toast('浏览器已关闭');
+    }
+  }catch(e){
+    toast('停止失败: '+e.message);
+  }finally{
+    el.btnStopBrowser.disabled=false;
+  }
+}
+
+async function retryAfterLogin(){
+  // 刷新登录状态
+  await refreshBossBrowserStatus();
+  if(bossBrowserLoggedIn){
+    toast('登录成功，可以开始采集');
+    el.bossCaptureStatus.innerHTML='<div style="color:var(--green);font-size:0.75rem;">✓ 登录成功，可以开始采集</div>';
+  }else{
+    toast('仍未检测到登录，请在浏览器中完成登录');
+  }
+}
+
+function renderBossCaptureStatus(result){
+  if(!result){
+    el.bossCaptureStatus.innerHTML='';
+    el.btnRebuildProfile.style.display='none';
+    return;
+  }
+  const r=result;
+  let h='<div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.5rem;">';
+  h+='<span class="capture-stat">发现 <b>'+r.captured_count+'</b> 条</span>';
+  if(r.imported_count>0)h+='<span class="capture-stat imported">导入 <b>'+r.imported_count+'</b> 条</span>';
+  if(r.detail_missing_count>0)h+='<span class="capture-stat skipped">详情缺失 <b>'+r.detail_missing_count+'</b> 条</span>';
+  if(r.skipped_count>0)h+='<span class="capture-stat skipped">跳过 <b>'+r.skipped_count+'</b> 条</span>';
+  if(r.failed_count>0)h+='<span class="capture-stat failed">失败 <b>'+r.failed_count+'</b> 条</span>';
+  h+='</div>';
+  if(r.blocked_reason)h+='<div class="capture-warning">⚠ '+esc(r.blocked_reason)+'</div>';
+  if(r.warnings&&r.warnings.length){
+    h+='<div class="capture-warning">'+r.warnings.map(w=>'• '+esc(w)).join('<br>')+'</div>';
+  }
+  if(r.profile_generated){
+    h+='<div style="margin-top:0.5rem;font-size:0.72rem;color:var(--green);">✓ 岗位画像已自动生成 (ID: '+r.job_profile_id+')</div>';
+    el.btnRebuildProfile.style.display='';
+  }else if(r.imported_count>0){
+    h+='<div style="margin-top:0.5rem;font-size:0.72rem;color:var(--green);">✓ JD 已入库，可点击下方按钮生成岗位画像</div>';
+    el.btnRebuildProfile.style.display='';
+  }else{
+    el.btnRebuildProfile.style.display='none';
+  }
+  el.bossCaptureStatus.innerHTML=h;
+}
+
+async function runBossCapture(){
+  const jobName=el.bossJobInput.value.trim();
+  if(!jobName){toast('请输入岗位关键词');return;}
+  const city=el.bossCityInput.value.trim();
+  const maxJobs=parseInt(el.bossMaxJobs.value)||10;
+  const filters={};
+  if(el.bossExpFilter.value)filters.experience=el.bossExpFilter.value;
+  if(el.bossEduFilter.value)filters.education=el.bossEduFilter.value;
+
+  el.btnBossCapture.disabled=true;
+  el.btnBossCapture.textContent='采集中...';
+  el.bossCaptureStatus.innerHTML='<div style="display:flex;align-items:center;gap:0.5rem;"><div class="spinner" style="width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.8s linear infinite;"></div><span>正在采集 Boss 直聘 JD...</span></div>';
+
+  try{
+    const res=await api.bossCapture(jobName,city,maxJobs,filters);
+    if(res.code!==200)throw new Error(res.message||'采集失败');
+    bossCaptureResult=res;
+    renderBossCaptureStatus(res);
+    // 同步到岗位输入框
+    el.gapJobInput.value=jobName;
+    // 如果自动生成了画像，立即渲染
+    if(res.profile_generated&&res.job_profile){
+      currentJobProfile=normalizeJobProfile(res.job_profile);
+      renderJobProfileCard(res.job_profile);
+      updateGapStepper();
+      // 折叠采集表单
+      if(el.bossCaptureBody)el.bossCaptureBody.classList.add('collapsed');
+      if(el.btnToggleBossCapture)el.btnToggleBossCapture.textContent='展开';
+    }
+    toast('采集完成');
+  }catch(e){
+    bossCaptureResult=null;
+    renderBossCaptureStatus(null);
+    el.bossCaptureStatus.innerHTML='<div class="capture-warning">⚠ '+esc(e.message)+'</div>';
+    toast('采集失败: '+e.message);
+  }finally{
+    el.btnBossCapture.disabled=false;
+    el.btnBossCapture.textContent='启动采集';
+  }
+}
+
+async function runBossManualImport(){
+  const jobName=el.bossJobInput.value.trim();
+  if(!jobName){toast('请先输入岗位关键词');return;}
+  const jdText=el.bossManualJdInput.value.trim();
+  if(!jdText){toast('请粘贴 JD 文本');return;}
+
+  el.btnBossManualImport.disabled=true;
+  el.btnBossManualImport.textContent='导入中...';
+
+  try{
+    const res=await api.bossManualImport(jobName,jdText);
+    if(res.code!==200)throw new Error(res.message||'导入失败');
+    bossCaptureResult=res;
+    renderBossCaptureStatus(res);
+    el.bossManualJdInput.value='';
+    // 同步到岗位输入框
+    el.gapJobInput.value=jobName;
+    // 如果自动生成了画像，立即渲染
+    if(res.profile_generated&&res.job_profile){
+      currentJobProfile=normalizeJobProfile(res.job_profile);
+      renderJobProfileCard(res.job_profile);
+      updateGapStepper();
+    }
+    toast('导入完成');
+  }catch(e){
+    toast('导入失败: '+e.message);
+  }finally{
+    el.btnBossManualImport.disabled=false;
+    el.btnBossManualImport.textContent='导入 JD';
+  }
+}
+
+async function runRebuildJobProfile(){
+  const jobName=el.bossJobInput.value.trim()||el.gapJobInput.value.trim();
+  if(!jobName){toast('请先输入岗位关键词');return;}
+
+  el.btnRebuildProfile.disabled=true;
+  el.btnRebuildProfile.textContent='重建中...';
+
+  try{
+    const res=await api.rebuildJobProfile(jobName,'boss',20);
+    if(res.code!==200)throw new Error(res.message||'重建失败');
+    // 更新当前岗位画像
+    currentJobProfile=res.profile;
+    // 同步到岗位输入框
+    el.gapJobInput.value=jobName;
+    // 显示画像预览
+    renderJobProfilePreview(res.profile);
+    toast('岗位画像已重建 (ID: '+res.job_profile_id+')');
+  }catch(e){
+    toast('重建失败: '+e.message);
+  }finally{
+    el.btnRebuildProfile.disabled=false;
+    el.btnRebuildProfile.textContent='重建岗位画像';
+  }
+}
+
 async function runGapAnalysis(){
   const job=el.gapJobInput.value.trim();
   if(!job){toast('请输入目标岗位');return;}
@@ -558,16 +968,19 @@ async function runGapAnalysis(){
   el.gapResult.innerHTML='<div class="msg-loading"></div><div style="text-align:center;margin-top:0.5rem;font-size:0.72rem;color:var(--text-dim)">正在分析岗位画像...</div>';
 
   try{
-    // ── Step 1: 岗位画像 ──
-    const jobRes=await api.analyzeJobProfile(job,20);
-    if(jobRes.code!==200)throw new Error(jobRes.message||'岗位画像分析失败');
-    currentJobProfile=jobRes.profile;
+    // ── Step 1: 岗位画像（如果已有则复用）──
+    let jobProfileId=currentJobProfile?._id||0;
+    if(!jobProfileId){
+      const jobRes=await api.analyzeJobProfile(job,20);
+      if(jobRes.code!==200)throw new Error(jobRes.message||'岗位画像分析失败');
+      currentJobProfile=normalizeJobProfile(jobRes.profile);
+      currentJobProfile._id=jobRes.job_profile_id;
+      jobProfileId=jobRes.job_profile_id;
+    }
     el.gapResult.querySelector('.msg-loading').textContent='岗位画像完成，正在分析候选人...';
 
     // ── Step 2: 候选人画像 ──
     if(!resumeText&&!currentCandidateProfile){
-      // 没有简历也没有已有画像，展示岗位画像并提示
-      currentJobProfile=jobRes.profile;
       profileAnalysisLoading=false;
       renderProfileReport(null,null,null,'请上传简历或粘贴经历文本后再分析适配度');
       el.btnGapAnalyze.disabled=false;
@@ -583,7 +996,7 @@ async function runGapAnalysis(){
     currentCandidateProfile=candRes.profile;
 
     // ── Step 3: 综合适配分析 ──
-    const fitRes=await api.createFitAnalysis(userId,jobRes.job_profile_id,candRes.candidate_profile_id);
+    const fitRes=await api.createFitAnalysis(userId,jobProfileId,candRes.candidate_profile_id);
     if(fitRes.code!==200)throw new Error(fitRes.message||'适配分析失败');
     currentFitReport=fitRes.report;
     currentAnalysisMode=fitRes.analysis_mode||'agent';
@@ -593,6 +1006,7 @@ async function runGapAnalysis(){
     profileAnalysisError='';
     renderProfileReport(currentJobProfile,currentCandidateProfile,currentFitReport);
     loadFitReportHistory();  // 刷新历史列表
+    updateGapStepper();  // 更新流程状态
 
     // 后台加载旧技能差距数据作为补充
     try{
@@ -1132,6 +1546,11 @@ el.btnGapClear.addEventListener('click',()=>{
   el.gapExtraInput.value='';
 });
 el.btnResumeProfile.addEventListener('click',extractResumeProfile);
+
+// ── v0.26 Tab 切换 ──
+document.querySelectorAll('.gap-tab').forEach(tab=>{
+  tab.addEventListener('click',()=>switchGapTab(tab.dataset.tab));
+});
 // 文件选择时显示文件名
 if(el.resumeFileInput){
   el.resumeFileInput.addEventListener('change',()=>{
@@ -1158,6 +1577,27 @@ el.btnGapClearFeedback.addEventListener('click',async()=>{
   renderFeedbackSummary(gapCurrentJob);
   toast('已清空「'+gapCurrentJob+'」的反馈');
 });
+
+// ── v0.25 Boss 采集面板事件 ──
+if(el.btnToggleBossCapture){
+  el.btnToggleBossCapture.addEventListener('click',()=>{
+    const body=el.bossCaptureBody;
+    const btn=el.btnToggleBossCapture;
+    body.classList.toggle('collapsed');
+    btn.textContent=body.classList.contains('collapsed')?'展开':'折叠';
+    // 展开时刷新浏览器状态
+    if(!body.classList.contains('collapsed'))refreshBossBrowserStatus();
+  });
+}
+if(el.btnStartBrowser)el.btnStartBrowser.addEventListener('click',startBossBrowser);
+if(el.btnStopBrowser)el.btnStopBrowser.addEventListener('click',stopBossBrowser);
+if(el.btnRetryAfterLogin)el.btnRetryAfterLogin.addEventListener('click',retryAfterLogin);
+if(el.btnBossCapture)el.btnBossCapture.addEventListener('click',runBossCapture);
+if(el.btnBossManualImport)el.btnBossManualImport.addEventListener('click',runBossManualImport);
+if(el.btnRebuildProfile)el.btnRebuildProfile.addEventListener('click',runRebuildJobProfile);
+if(el.bossJobInput){
+  el.bossJobInput.addEventListener('keydown',e=>{if(e.key==='Enter')runBossCapture();});
+}
 
 // ═══════════════════════════════════════════════
 // 视图4: 深度研究

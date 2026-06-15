@@ -74,67 +74,127 @@
     </div>
   </div>
 
-  <!-- 视图: 技能差距 -->
+  <!-- 视图: 适配分析工作台 -->
   <div id="viewGap" class="view">
+    <!-- 顶部：岗位输入 + 流程状态 -->
     <div class="gap-top">
       <div class="gap-search">
         <input type="text" id="gapJobInput" placeholder="目标岗位，例如 Python后端" autocomplete="off" />
         <button id="btnGapLoad">加载技能</button>
       </div>
-      <div class="radar-tags-toggle" id="gapTagsToggle">
-        <span class="tags-toggle-label">已分析岗位</span>
-        <svg class="tags-toggle-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      <div class="gap-stepper" id="gapStepper">
+        <span class="step" data-step="1">① 岗位画像</span>
+        <span class="step-arrow">→</span>
+        <span class="step" data-step="2">② 简历画像</span>
+        <span class="step-arrow">→</span>
+        <span class="step" data-step="3">③ 适配分析</span>
       </div>
-      <div class="radar-quick-tags collapsed" id="gapQuickTags"></div>
     </div>
-    <div class="gap-body">
-      <section class="gap-column">
-        <div class="gap-section-head">
-          <div>
-            <div class="gap-label">岗位画像</div>
-            <div class="gap-subtle" id="gapMarketMeta">等待选择岗位</div>
+
+    <!-- Tab 内容区 -->
+    <div class="gap-tabs">
+      <div class="gap-tab-bar">
+        <button class="gap-tab active" data-tab="capture">岗位采集</button>
+        <button class="gap-tab" data-tab="resume">简历画像</button>
+        <button class="gap-tab" data-tab="fit">适配分析</button>
+        <button class="gap-tab" data-tab="history">历史报告</button>
+      </div>
+
+      <!-- Tab 1: 岗位采集 -->
+      <div class="gap-tab-panel active" id="tabCapture">
+        <!-- Boss 采集表单 -->
+        <div class="boss-capture-panel" id="bossCapturePanel">
+          <div class="boss-capture-header">
+            <span class="gap-label">Boss 岗位采集</span>
+            <button class="gap-mini-btn" id="btnToggleBossCapture">展开</button>
           </div>
-          <button class="gap-mini-btn" id="btnGapClear">清空</button>
+          <div class="boss-capture-body collapsed" id="bossCaptureBody">
+            <div class="boss-browser-controls">
+              <span class="boss-browser-status" id="bossBrowserStatus">浏览器: 未启动</span>
+              <button class="boss-capture-btn start" id="btnStartBrowser">启动浏览器</button>
+              <button class="boss-capture-btn stop" id="btnStopBrowser" style="display:none;">停止浏览器</button>
+              <button class="boss-capture-btn retry" id="btnRetryAfterLogin" style="display:none;">我已完成登录，重试采集</button>
+            </div>
+            <div class="boss-capture-form">
+              <input type="text" id="bossJobInput" placeholder="岗位关键词，例如 AI Agent" />
+              <input type="text" id="bossCityInput" placeholder="城市，例如 杭州" />
+              <select id="bossExpFilter">
+                <option value="">经验不限</option>
+                <option value="应届">应届</option>
+                <option value="1-3年">1-3年</option>
+                <option value="3-5年">3-5年</option>
+                <option value="5-10年">5-10年</option>
+              </select>
+              <select id="bossEduFilter">
+                <option value="">学历不限</option>
+                <option value="大专">大专</option>
+                <option value="本科">本科</option>
+                <option value="硕士">硕士</option>
+              </select>
+              <input type="number" id="bossMaxJobs" value="10" min="1" max="30" placeholder="数量" />
+              <button class="boss-capture-btn" id="btnBossCapture">启动采集</button>
+            </div>
+            <div class="boss-capture-alt">
+              <span class="gap-subtle">或手动粘贴 JD 文本：</span>
+              <textarea id="bossManualJdInput" rows="3" placeholder="粘贴 JD 原文..."></textarea>
+              <button class="gap-mini-btn" id="btnBossManualImport">导入 JD</button>
+            </div>
+            <div id="bossCaptureStatus" class="boss-capture-status"></div>
+            <button class="boss-capture-btn rebuild" id="btnRebuildProfile" style="display:none;">重新生成画像</button>
+          </div>
         </div>
-        <div class="gap-skill-list" id="gapSkillList">
-          <div class="radar-empty">选择岗位后显示岗位画像</div>
-        </div>
-        <div id="gapFeedbackSummary" class="gap-feedback-summary"></div>
-        <div class="gap-feedback-actions">
-          <button class="gap-mini-btn" id="btnGapClearFeedback" title="清空当前岗位反馈">清空反馈</button>
-        </div>
-        <div class="gap-profile-box">
-          <div class="gap-section-head compact">
+        <!-- 岗位画像卡片 -->
+        <div id="jobProfileCard" class="profile-card-container"></div>
+      </div>
+
+      <!-- Tab 2: 简历画像 -->
+      <div class="gap-tab-panel" id="tabResume">
+        <div class="resume-section">
+          <div class="gap-section-head">
             <div>
-              <div class="gap-label">简历技能画像</div>
+              <div class="gap-label">简历画像</div>
               <div class="gap-subtle">粘贴简历或上传文本版 PDF/DOCX/TXT</div>
             </div>
           </div>
-          <textarea id="resumeTextInput" rows="4" placeholder="粘贴简历、项目经历，或描述你做过的项目"></textarea>
+          <textarea id="resumeTextInput" rows="6" placeholder="粘贴简历、项目经历，或描述你做过的项目"></textarea>
           <div class="gap-profile-actions">
             <input type="file" id="resumeFileInput" accept=".pdf,.docx,.txt,.md" />
             <button class="gap-mini-btn" id="btnResumeProfile">识别画像</button>
           </div>
           <div id="resumeParseStatus" class="gap-subtle" style="margin-top:0.3rem;"></div>
-          <div id="profileSkillList" class="profile-skill-list">
-            <div class="gap-subtle">画像技能会自动参与差距分析</div>
+        </div>
+        <!-- 候选人画像卡片 -->
+        <div id="candidateProfileCard" class="profile-card-container"></div>
+      </div>
+
+      <!-- Tab 3: 适配分析 -->
+      <div class="gap-tab-panel" id="tabFit">
+        <div class="fit-summary-row">
+          <div id="fitJobSummary" class="fit-summary-card">
+            <div class="gap-label">岗位画像</div>
+            <div class="gap-subtle">请先完成岗位采集</div>
+          </div>
+          <div id="fitCandSummary" class="fit-summary-card">
+            <div class="gap-label">候选人画像</div>
+            <div class="gap-subtle">请先上传简历</div>
           </div>
         </div>
         <div class="gap-extra">
           <div class="gap-label">补充技能</div>
-          <textarea id="gapExtraInput" rows="3" placeholder="Python, MySQL, Git"></textarea>
+          <textarea id="gapExtraInput" rows="2" placeholder="Python, MySQL, Git（可选）"></textarea>
         </div>
         <button class="gap-analyze-btn" id="btnGapAnalyze">分析适配度</button>
-      </section>
-      <section class="gap-result" id="gapResult">
-        <div class="gap-result-empty">差距结果将在这里显示</div>
-      </section>
-      <section class="fit-history-section">
-        <div class="gap-block-title">历史报告</div>
+        <div id="gapResult" class="gap-result-area">
+          <div class="gap-result-empty">完成岗位采集和简历画像后，点击上方按钮分析适配度</div>
+        </div>
+      </div>
+
+      <!-- Tab 4: 历史报告 -->
+      <div class="gap-tab-panel" id="tabHistory">
         <div id="fitReportHistory" class="fit-history-list">
           <div style="font-size:0.68rem;color:var(--text-muted);padding:0.4rem;">暂无历史报告</div>
         </div>
-      </section>
+      </div>
     </div>
   </div>
 

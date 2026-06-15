@@ -768,6 +768,101 @@ def get_stats():
     return {"code": 200, "skill_count": skill_count, "jd_count": jd_count}
 
 
+# ═══ v0.25.1 Boss 浏览器采集控制 ═══
+
+@app.post("/boss/browser/start")
+def start_boss_browser():
+    """启动 Boss 直聘浏览器"""
+    from services.boss_browser_capture import start_browser
+    result = start_browser(headless=False)
+    return {"code": 200, **result.model_dump()}
+
+
+@app.post("/boss/browser/stop")
+def stop_boss_browser():
+    """停止 Boss 直聘浏览器"""
+    from services.boss_browser_capture import stop_browser
+    result = stop_browser()
+    return {"code": 200, **result.model_dump()}
+
+
+@app.get("/boss/browser/status")
+def get_boss_browser_status():
+    """获取 Boss 直聘浏览器状态"""
+    from services.boss_browser_capture import get_browser_status
+    result = get_browser_status()
+    return {"code": 200, **result.model_dump()}
+
+
+@app.post("/boss/browser/open-login")
+def open_boss_login_page():
+    """打开 Boss 登录页"""
+    from services.boss_browser_capture import open_login_page
+    result = open_login_page()
+    return {"code": 200, **result.model_dump()}
+
+
+# ═══ v0.25 Boss 岗位采集 + 岗位画像重建 ═══
+
+class BossCaptureRequest(BaseModel):
+    job_name: str
+    city: str = ""
+    max_jobs: int = Field(default=10, ge=1, le=30)
+    filters: dict = Field(default_factory=dict)
+
+
+@app.post("/jd_sources/boss/capture")
+def boss_capture(request: BossCaptureRequest):
+    """Boss 直聘 JD 采集"""
+    from services.boss_capture_service import capture_boss_jds, BossCaptureRequest as _Req
+    req = _Req(
+        job_name=request.job_name,
+        city=request.city,
+        max_jobs=request.max_jobs,
+        filters=request.filters,
+    )
+    result = capture_boss_jds(req)
+    return {"code": 200, **result.model_dump()}
+
+
+class BossManualImportRequest(BaseModel):
+    job_name: str
+    jd_text: str
+    title: str = ""
+    company: str = ""
+
+
+@app.post("/jd_sources/boss/import")
+def boss_manual_import(request: BossManualImportRequest):
+    """手动导入单条 JD 文本"""
+    from services.boss_capture_service import import_manual_jd
+    result = import_manual_jd(
+        job_name=request.job_name,
+        jd_text=request.jd_text,
+        title=request.title,
+        company=request.company,
+    )
+    return {"code": 200, **result.model_dump()}
+
+
+class JobProfileRebuildRequest(BaseModel):
+    job_name: str
+    source_platform: str = "boss"
+    top_n: int = Field(default=20, ge=1, le=50)
+
+
+@app.post("/job_profiles/rebuild")
+def rebuild_job_profile(request: JobProfileRebuildRequest):
+    """从最近采集的 JD 重建岗位画像（生成新 job_profile_id，不覆盖旧画像）"""
+    from services.job_profile_agent import build_job_profile_from_jds
+    from services.job_profile_service import save_job_profile
+    profile, doc_ids = build_job_profile_from_jds(
+        request.job_name, request.source_platform, request.top_n
+    )
+    profile_id = save_job_profile(profile, source_doc_ids=doc_ids)
+    return {"code": 200, "job_profile_id": profile_id, "profile": profile.model_dump()}
+
+
 # ── 岗位分析（保留 API） ──
 class JobRequest(BaseModel):
     job_name: str
