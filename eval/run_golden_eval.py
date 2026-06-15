@@ -241,6 +241,36 @@ def _evaluate_case(case: dict, job_profile: dict, candidate_profile: dict, fit_r
         fit_report.get("learning_plan", []),
     )
 
+    # v0.31 适配分析字段级指标
+    interview_hit, interview_miss = _keyword_hit_rate(
+        gold_fit.get("interview_strategy_keywords", []),
+        fit_report.get("interview_strategy", []),
+    )
+    risk_hit, risk_miss = _keyword_hit_rate(
+        gold_fit.get("risk_keywords", []),
+        fit_report.get("gaps", []) + fit_report.get("risks_and_gaps", {}).get("evidence_refs", []),
+    )
+
+    # score_in_expected_range
+    score_range = gold_fit.get("expected_score_range", [])
+    actual_score = fit_report.get("overall_score", 0)
+    if score_range:
+        score_in_range = score_range[0] <= actual_score <= score_range[1]
+    else:
+        score_in_range = True
+
+    # evidence_ref_coverage_fit：strengths/gaps/learning_plan/interview_strategy 中有 evidence_refs 的比例
+    fit_evidence_items = []
+    if fit_report.get("strengths"):
+        fit_evidence_items.append(True)
+    if fit_report.get("gaps"):
+        fit_evidence_items.append(True)
+    if fit_report.get("learning_plan"):
+        fit_evidence_items.append(True)
+    if fit_report.get("interview_strategy"):
+        fit_evidence_items.append(True)
+    fit_evidence_coverage = round(len(fit_evidence_items) / 4, 3) if fit_evidence_items else 0
+
     # 幻觉标记
     hallucination_flags = []
     sys_must = set(s.lower() for s in job_profile.get("must_have_capabilities", []))
@@ -280,6 +310,16 @@ def _evaluate_case(case: dict, job_profile: dict, candidate_profile: dict, fit_r
             "cand_learning_signal_hit_rate": round(cand_learn_hit * 100, 1),
             "cand_risk_point_match_rate": round(risk_match_rate * 100, 1),
             "cand_evidence_coverage": round(cand_evidence_coverage * 100, 1),
+            # 适配分析
+            "fit_level_match": fit_level_match,
+            "fit_level_near_match": fit_level_near_match,
+            "fit_score_in_range": score_in_range,
+            "fit_strengths_hit_rate": round(strengths_hit * 100, 1),
+            "fit_gaps_hit_rate": round(gaps_hit * 100, 1),
+            "fit_learning_hit_rate": round(learning_hit * 100, 1),
+            "fit_interview_hit_rate": round(interview_hit * 100, 1),
+            "fit_risk_hit_rate": round(risk_hit * 100, 1),
+            "fit_evidence_coverage": round(fit_evidence_coverage * 100, 1),
         },
         "fit_level_match": fit_level_match,
         "fit_level_near_match": fit_level_near_match,
@@ -398,6 +438,16 @@ def run_golden_eval(use_agent: bool = False, limit: int = 0, output: str = None)
         "avg_cand_learning_signal_hit_rate": _avg_field("cand_learning_signal_hit_rate"),
         "avg_cand_risk_point_match_rate": _avg_field("cand_risk_point_match_rate"),
         "avg_cand_evidence_coverage": _avg_field("cand_evidence_coverage"),
+        # v0.31 适配分析字段级指标
+        "fit_level_exact_match_rate": _avg_field_bool("fit_level_match"),
+        "fit_level_near_match_rate": _avg_field_bool("fit_level_near_match"),
+        "fit_score_in_range_rate": _avg_field_bool("fit_score_in_range"),
+        "avg_fit_strengths_hit_rate": _avg_field("fit_strengths_hit_rate"),
+        "avg_fit_gaps_hit_rate": _avg_field("fit_gaps_hit_rate"),
+        "avg_fit_learning_hit_rate": _avg_field("fit_learning_hit_rate"),
+        "avg_fit_interview_hit_rate": _avg_field("fit_interview_hit_rate"),
+        "avg_fit_risk_hit_rate": _avg_field("fit_risk_hit_rate"),
+        "avg_fit_evidence_coverage": _avg_field("fit_evidence_coverage"),
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "use_agent": use_agent,
     }
@@ -440,6 +490,16 @@ def run_golden_eval(use_agent: bool = False, limit: int = 0, output: str = None)
     print(f"  学习信号命中率: {summary['avg_cand_learning_signal_hit_rate']}%")
     print(f"  风险点匹配率: {summary['avg_cand_risk_point_match_rate']}%")
     print(f"  候选人证据覆盖率: {summary['avg_cand_evidence_coverage']}%")
+    print(f"  --- 适配分析字段级指标 ---")
+    print(f"  适配等级精确匹配率: {summary['fit_level_exact_match_rate']}%")
+    print(f"  适配等级近似匹配率: {summary['fit_level_near_match_rate']}%")
+    print(f"  分数在期望范围内: {summary['fit_score_in_range_rate']}%")
+    print(f"  优势命中率: {summary['avg_fit_strengths_hit_rate']}%")
+    print(f"  差距命中率: {summary['avg_fit_gaps_hit_rate']}%")
+    print(f"  学习计划命中率: {summary['avg_fit_learning_hit_rate']}%")
+    print(f"  面试策略命中率: {summary['avg_fit_interview_hit_rate']}%")
+    print(f"  风险命中率: {summary['avg_fit_risk_hit_rate']}%")
+    print(f"  适配证据覆盖率: {summary['avg_fit_evidence_coverage']}%")
     print(f"  报告: {out_path}")
     print(f"{'='*50}")
 
