@@ -363,11 +363,22 @@ def analyze_fit(
     if job_profile.business_context and not candidate_profile.business_understanding:
         gaps.append("业务场景经验不足")
 
-    # ── 学习计划（v0.32 校准：从 gaps 自动生成，包含具体技能名） ──
+    # ── 学习计划（v0.33 校准：从 gaps + nice_to_have 自动生成） ──
     learning_plan = []
+
+    # 从 must_have 缺口中生成学习计划
     for skill in list(missing)[:5]:
         if _is_real_skill(skill.lower()):
             learning_plan.append(f"补充「{skill}」相关技能和项目经验")
+
+    # 从 nice_to_have 缺口中生成学习计划（v0.33 新增）
+    nice_real = {s for s in job_profile.nice_to_have_capabilities if _is_real_skill(s.lower())}
+    nice_missing = {s for s in nice_real if s.lower() not in cand_skills}
+    for skill in list(nice_missing)[:3]:
+        if _is_real_skill(skill.lower()):
+            learning_plan.append(f"补充「{skill}」相关技能和项目经验")
+
+    # 项目/成果/实习/业务场景建议
     if not candidate_profile.achievements:
         learning_plan.append("在项目经历中补充量化成果（规模、效率、准确率）")
     if not candidate_profile.internships:
