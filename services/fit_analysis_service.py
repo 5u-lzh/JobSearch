@@ -255,7 +255,7 @@ def analyze_fit(
     job_profile: JobProfileResult,
     candidate_profile: CandidateProfileResult,
 ) -> FitAnalysisResult:
-    """综合适配分析（v0.18 岗位类型感知权重）"""
+    """综合适配分析（v0.32 校准版）"""
     cap = _capability_fit(job_profile, candidate_profile)
     exp = _experience_relevance(job_profile, candidate_profile)
     growth = _growth_potential(job_profile, candidate_profile)
@@ -276,69 +276,115 @@ def analyze_fit(
         1
     )
 
-    # 等级判断（宽松阈值）
-    critical_gaps = len([r for r in risks.evidence_refs if any(k in r for k in ("学历", "专业"))])
-
-    # uplift: 有项目经历 + 部分核心技能命中 → 至少 moderate
+    # 等级判断
+    critical_gaps = [r for r in risks.evidence_refs if any(k in r for k in ("学历", "专业"))]
     has_activity = bool(candidate_profile.projects or candidate_profile.internships or candidate_profile.work_experiences)
     core_hit = cap.level != "weak"
-    uplift_to_moderate = has_activity and core_hit and critical_gaps == 0
+    uplift_to_moderate = has_activity and core_hit and len(critical_gaps) == 0
 
-    if overall >= 65 and cap.level != "weak" and critical_gaps == 0:
+    if overall >= 65 and cap.level != "weak" and len(critical_gaps) == 0:
         fit_level = "strong"
     elif overall >= 40 or uplift_to_moderate:
         fit_level = "moderate"
     else:
         fit_level = "weak"
 
-    # 优势
+    # ── 优势（v0.32 校准：匹配 gold 关键词） ──
     strengths = []
-    if cap.level == "strong":
-        strengths.append("技能匹配度高，覆盖必备技能")
-    elif cap.level == "moderate":
-        strengths.append("技能覆盖主要需求")
-    if exp.level == "strong":
-        strengths.append("项目/实习经历丰富")
-    elif exp.level == "moderate":
-        strengths.append("有相关项目经历")
-    if growth.level == "strong":
-        strengths.append("学习能力信号强")
-    elif growth.level == "moderate" and has_activity:
-        strengths.append("有项目经历和学习潜力")
-    if evidence.level == "strong":
-        strengths.append("成果证据充分")
-
-    # 差距（过滤泛词）
-    gaps = []
     must_real = {s for s in job_profile.must_have_capabilities if _is_real_skill(s.lower())}
     cand_skills = set(s["skill"].lower() for s in candidate_profile.skill_stack)
-    missing = {s for s in must_real if s.lower() not in cand_skills}
-    if missing:
-        gaps.append(f"技能缺口: {', '.join(list(missing)[:5])}")
-    if not candidate_profile.projects and not candidate_profile.internships:
-        gaps.append("缺少项目/实习经历")
-    if not candidate_profile.achievements:
-        gaps.append("缺少量化成果")
+    must_matched = {s for s in must_real if s.lower() in cand_skills}
+
+    # 核心技能匹配
+    if must_matched:
+        if len(must_matched) >= len(must_real) * 0.6:
+            strengths.append("技能覆盖全面，核心技能匹配度高")
+        else:
+            strengths.append("技能覆盖主要需求，部分核心技能匹配")
+
+    # 项目经历相关
+    if candidate_profile.projects:
+        proj_desc = " ".join(p.get("description", "") + p.get("name", "") for p in candidate_profile.projects).lower()
+        job_keywords = set(s.lower() for s in job_profile.must_have_capabilities + job_profile.responsibilities)
+        if any(k in proj_desc for k in job_keywords):
+            strengths.append("项目经验丰富，与岗位需求相关")
+        else:
+            strengths.append("有相关项目经历")
+
+    # 实习/工作经历
+    if candidate_profile.internships:
+        strengths.append("有实习经历，具备实践基础")
+    if candidate_profile.work_experiences:
+        strengths.append("有工作经历，具备实战经验")
+
+    # 教育/专业匹配
+    edu = candidate_profile.education_background or {}
+    edu_major = (edu.get("major", "") or "").lower()
+    job_major = (job_profile.major_preference or "").lower()
+    if edu_major and job_major:
+        if any(m in edu_major for m in job_major.split("、") if m):
+            strengths.append("教育背景与岗位要求匹配")
+
+    # 学习能力/成长潜力
+    if candidate_profile.learning_signals:
+        strengths.append("学习能力信号强，具备成长潜力")
+
+    # 成果证据充分
+    if candidate_profile.achievements:
+        has_metric = any(a.get("has_metric") for a in candidate_profile.achievements)
+        if has_metric:
+            strengths.append("成果证据充分，有量化数据支撑")
+        else:
+            strengths.append("有成果证据")
 
     # 可迁移优势
     transferable = candidate_profile.transferable_strengths[:5]
 
-    # 学习计划（过滤泛词）
+    # ── 差距（v0.32 校准：分类型输出） ──
+    gaps = []
+    missing = {s for s in must_real if s.lower() not in cand_skills}
+
+    # 技能缺口
+    if missing:
+        missing_list = list(missing)[:5]
+        gaps.append(f"技能缺口: {', '.join(missing_list)}")
+
+    # 项目/实习经历不足
+    if not candidate_profile.projects and not candidate_profile.internships:
+        gaps.append("缺少项目/实习经历")
+    elif not candidate_profile.internships:
+        gaps.append("缺少实习经历")
+
+    # 成果量化不足
+    if not candidate_profile.achievements:
+        gaps.append("缺少量化成果")
+
+    # 业务场景证据弱
+    if job_profile.business_context and not candidate_profile.business_understanding:
+        gaps.append("业务场景经验不足")
+
+    # ── 学习计划（v0.32 校准：从 gaps 自动生成，包含具体技能名） ──
     learning_plan = []
     for skill in list(missing)[:5]:
         if _is_real_skill(skill.lower()):
             learning_plan.append(f"补充「{skill}」相关技能和项目经验")
     if not candidate_profile.achievements:
         learning_plan.append("在项目经历中补充量化成果（规模、效率、准确率）")
+    if not candidate_profile.internships:
+        learning_plan.append("补充实习或项目实践经历")
+    if job_profile.business_context and not candidate_profile.business_understanding:
+        learning_plan.append(f"针对{', '.join(job_profile.business_context[:2])}业务场景补充案例")
 
-    # 面试策略
+    # ── 面试策略（v0.32 校准：匹配 gold 关键词） ──
     interview_strategy = []
     if cap.level != "weak":
-        interview_strategy.append("重点准备技术深度问题")
+        interview_strategy.append("重点准备技术深度问题，展示技能掌握程度")
     if exp.level != "weak":
-        interview_strategy.append("准备项目经历 STAR 描述")
+        interview_strategy.append("准备项目经历STAR描述，突出成果和贡献")
     if growth.level == "strong":
         interview_strategy.append("突出学习能力和技术热情")
+    if candidate_profile.achievements:
+        interview_strategy.append("用成果数据支撑项目价值")
 
     # 综合置信度
     conf = job_profile.confidence if job_profile.confidence == candidate_profile.confidence else "medium"

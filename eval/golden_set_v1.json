@@ -37,7 +37,7 @@
       "expected_strengths": ["技能覆盖", "项目经验", "量化成果"],
       "expected_gaps": [],
       "expected_learning_keywords": [],
-      "interview_strategy_keywords": ["技术深度", "项目STAR"],
+      "interview_strategy_keywords": ["技术深度", "项目经历STAR", "成果数据"],
       "risk_keywords": [],
       "decision_reason_keywords": ["技能匹配", "项目丰富"],
       "recommendation": "候选人技能栈与岗位高度匹配，项目经验丰富，建议进入面试流程"
@@ -79,10 +79,10 @@
     "gold_fit": {
       "overall_fit_level": "moderate",
       "expected_score_range": [40, 75],
-      "expected_strengths": ["产品经验", "AI产品经历", "量化成果"],
-      "expected_gaps": ["技术深度", "AI技术理解"],
+      "expected_strengths": ["项目经验", "学习能力", "成果证据"],
+      "expected_gaps": ["技能缺口", "缺少实习"],
       "expected_learning_keywords": ["大模型", "RAG", "Agent", "技术原理"],
-      "interview_strategy_keywords": ["技术深度", "项目经历"],
+      "interview_strategy_keywords": ["技术深度", "项目经历STAR", "学习能力"],
       "risk_keywords": ["技术深度"],
       "decision_reason_keywords": ["产品经验", "AI产品"],
       "recommendation": "候选人有AI产品经验，但技术深度需加强，建议补充AI技术原理学习"
@@ -124,10 +124,10 @@
     "gold_fit": {
       "overall_fit_level": "moderate",
       "expected_score_range": [40, 75],
-      "expected_strengths": ["前端经验", "性能优化", "项目经历"],
+      "expected_strengths": ["项目经历", "工作经历", "成果证据"],
       "expected_gaps": ["React", "TypeScript", "学历"],
       "expected_learning_keywords": ["React", "TypeScript", "组件化"],
-      "interview_strategy_keywords": ["技术深度", "项目STAR"],
+      "interview_strategy_keywords": ["技术深度", "项目经历STAR"],
       "risk_keywords": ["学历", "框架不匹配"],
       "decision_reason_keywords": ["前端经验", "性能优化"],
       "recommendation": "候选人有丰富前端经验但框架不匹配，需补充React和TypeScript"
@@ -169,10 +169,10 @@
     "gold_fit": {
       "overall_fit_level": "moderate",
       "expected_score_range": [40, 75],
-      "expected_strengths": ["专业匹配", "技能基础", "项目经历"],
-      "expected_gaps": ["实习经历", "数据可视化", "机器学习"],
+      "expected_strengths": ["技能覆盖", "项目经历", "教育背景"],
+      "expected_gaps": ["缺少实习", "技能缺口"],
       "expected_learning_keywords": ["Tableau", "PowerBI", "机器学习", "A/B测试"],
-      "interview_strategy_keywords": ["项目经历", "学习能力"],
+      "interview_strategy_keywords": ["项目经历STAR", "学习能力"],
       "risk_keywords": ["缺少实习", "应届生"],
       "decision_reason_keywords": ["专业匹配", "技能基础"],
       "recommendation": "应届生基础匹配，需补充数据可视化工具和实习经历"
@@ -214,10 +214,10 @@
     "gold_fit": {
       "overall_fit_level": "strong",
       "expected_score_range": [60, 100],
-      "expected_strengths": ["专业匹配", "技能匹配", "项目经验", "工作经历"],
+      "expected_strengths": ["技能覆盖", "项目经历", "工作经历", "教育背景"],
       "expected_gaps": ["I2C/SPI/UART"],
       "expected_learning_keywords": ["硬件接口", "通信协议"],
-      "interview_strategy_keywords": ["技术深度", "项目STAR"],
+      "interview_strategy_keywords": ["技术深度", "项目经历STAR"],
       "risk_keywords": [],
       "decision_reason_keywords": ["专业匹配", "技能匹配"],
       "recommendation": "候选人技能和经历高度匹配，建议进入面试"
