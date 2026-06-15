@@ -388,34 +388,3 @@ def save_candidate_profile(profile: CandidateProfileResult, user_id: int, resume
         session.commit()
         session.refresh(obj)
         return obj.id
-
-
-def save_candidate_profile(profile: CandidateProfileResult, user_id: int, resume_filename: str = "") -> int:
-    """保存候选人画像到数据库"""
-    from models.database import SessionLocal
-    from models.profile import CandidateProfile
-    with SessionLocal() as session:
-        obj = CandidateProfile(
-            user_id=user_id,
-            source_type="resume_text",
-            resume_filename=resume_filename,
-            raw_text="",
-            education_background=json.dumps(profile.education_background, ensure_ascii=False),
-            skill_stack=json.dumps(profile.skill_stack, ensure_ascii=False),
-            projects=json.dumps(profile.projects, ensure_ascii=False),
-            internships=json.dumps(profile.internships, ensure_ascii=False),
-            work_experiences=json.dumps(profile.work_experiences, ensure_ascii=False),
-            business_understanding=json.dumps(profile.business_understanding, ensure_ascii=False),
-            achievements=json.dumps(profile.achievements, ensure_ascii=False),
-            learning_signals=json.dumps(profile.learning_signals, ensure_ascii=False),
-            transferable_strengths=json.dumps(profile.transferable_strengths, ensure_ascii=False),
-            collaboration_signals=json.dumps(profile.collaboration_signals, ensure_ascii=False),
-            risk_points=json.dumps(profile.risk_points, ensure_ascii=False),
-            evidence=json.dumps([e.model_dump() for e in profile.evidence], ensure_ascii=False),
-            confidence=profile.confidence,
-            sensitive_detected=json.dumps(profile.sensitive_detected, ensure_ascii=False),
-        )
-        session.add(obj)
-        session.commit()
-        session.refresh(obj)
-        return obj.id

@@ -168,6 +168,56 @@ def _evaluate_case(case: dict, job_profile: dict, candidate_profile: dict, fit_r
     )
     candidate_score = round((cand_skill_hit * 0.4 + cand_proj_hit * 0.4 + cand_achieve_hit * 0.2) * 100, 1)
 
+    # v0.30 候选人画像字段级指标
+    cand_edu_hit, cand_edu_miss = _keyword_hit_rate(
+        gold_cand.get("education_keywords", []),
+        [candidate_profile.get("education_background", {}).get("degree", ""),
+         candidate_profile.get("education_background", {}).get("major", ""),
+         candidate_profile.get("education_background", {}).get("graduation_year", "")],
+    )
+    cand_major_hit, cand_major_miss = _keyword_hit_rate(
+        gold_cand.get("major_keywords", []),
+        [candidate_profile.get("education_background", {}).get("major", "")],
+    )
+    cand_intern_hit, cand_intern_miss = _keyword_hit_rate(
+        gold_cand.get("internship_keywords", []),
+        candidate_profile.get("internships", []),
+        key="description",
+    )
+    cand_work_hit, cand_work_miss = _keyword_hit_rate(
+        gold_cand.get("work_experience_keywords", []),
+        candidate_profile.get("work_experiences", []),
+        key="description",
+    )
+    cand_learn_hit, cand_learn_miss = _keyword_hit_rate(
+        gold_cand.get("learning_signal_keywords", []),
+        candidate_profile.get("learning_signals", []),
+    )
+    # risk_point 匹配：检查 gold 风险关键词是否在 actual risk_points 中出现
+    gold_risks = gold_cand.get("risk_keywords", [])
+    actual_risks = candidate_profile.get("risk_points", [])
+    risk_match = 0
+    risk_total = len(gold_risks)
+    if risk_total > 0:
+        for gr in gold_risks:
+            if any(gr in ar for ar in actual_risks):
+                risk_match += 1
+        risk_match_rate = round(risk_match / risk_total, 3)
+    else:
+        risk_match_rate = 1.0  # 没有期望风险时默认通过
+
+    # evidence_coverage_candidate：项目/实习/工作/成果中有证据的比例
+    cand_evidence_items = []
+    if candidate_profile.get("projects"):
+        cand_evidence_items.append(True)
+    if candidate_profile.get("internships"):
+        cand_evidence_items.append(True)
+    if candidate_profile.get("work_experiences"):
+        cand_evidence_items.append(True)
+    if candidate_profile.get("achievements"):
+        cand_evidence_items.append(True)
+    cand_evidence_coverage = round(len(cand_evidence_items) / 4, 3) if cand_evidence_items else 0
+
     # ── 适配分析评估 ──
     actual_level = fit_report.get("overall_fit_level", "moderate")
     gold_level = gold_fit.get("overall_fit_level", "moderate")
@@ -207,8 +257,9 @@ def _evaluate_case(case: dict, job_profile: dict, candidate_profile: dict, fit_r
         "score": total_score,
         "job_profile_score": job_profile_score,
         "candidate_profile_score": candidate_score,
-        # v0.28 字段级指标
+        # v0.28/v0.30 字段级指标
         "field_scores": {
+            # 岗位画像
             "responsibilities_hit_rate": round(jp_resp_hit * 100, 1),
             "must_have_hit_rate": round(jp_must_hit * 100, 1),
             "nice_to_have_hit_rate": round(jp_nice_hit * 100, 1),
@@ -218,6 +269,17 @@ def _evaluate_case(case: dict, job_profile: dict, candidate_profile: dict, fit_r
             "target_audience_match": aud_match,
             "requirement_match_rate": round(req_match_rate * 100, 1),
             "evidence_coverage": round(evidence_coverage * 100, 1),
+            # 候选人画像
+            "cand_education_hit_rate": round(cand_edu_hit * 100, 1),
+            "cand_major_hit_rate": round(cand_major_hit * 100, 1),
+            "cand_skill_hit_rate": round(cand_skill_hit * 100, 1),
+            "cand_project_hit_rate": round(cand_proj_hit * 100, 1),
+            "cand_internship_hit_rate": round(cand_intern_hit * 100, 1),
+            "cand_work_experience_hit_rate": round(cand_work_hit * 100, 1),
+            "cand_achievement_hit_rate": round(cand_achieve_hit * 100, 1),
+            "cand_learning_signal_hit_rate": round(cand_learn_hit * 100, 1),
+            "cand_risk_point_match_rate": round(risk_match_rate * 100, 1),
+            "cand_evidence_coverage": round(cand_evidence_coverage * 100, 1),
         },
         "fit_level_match": fit_level_match,
         "fit_level_near_match": fit_level_near_match,
@@ -315,7 +377,7 @@ def run_golden_eval(use_agent: bool = False, limit: int = 0, output: str = None)
         "avg_job_profile_score": avg_job,
         "avg_candidate_profile_score": avg_cand,
         "fit_level_match_rate": fit_match_rate,
-        # v0.28 字段级指标
+        # v0.28 岗位画像字段级指标
         "avg_responsibilities_hit_rate": _avg_field("responsibilities_hit_rate"),
         "avg_must_have_hit_rate": _avg_field("must_have_hit_rate"),
         "avg_nice_to_have_hit_rate": _avg_field("nice_to_have_hit_rate"),
@@ -325,6 +387,17 @@ def run_golden_eval(use_agent: bool = False, limit: int = 0, output: str = None)
         "target_audience_match_rate": _avg_field_bool("target_audience_match"),
         "avg_requirement_match_rate": _avg_field("requirement_match_rate"),
         "avg_evidence_coverage": _avg_field("evidence_coverage"),
+        # v0.30 候选人画像字段级指标
+        "avg_cand_education_hit_rate": _avg_field("cand_education_hit_rate"),
+        "avg_cand_major_hit_rate": _avg_field("cand_major_hit_rate"),
+        "avg_cand_skill_hit_rate": _avg_field("cand_skill_hit_rate"),
+        "avg_cand_project_hit_rate": _avg_field("cand_project_hit_rate"),
+        "avg_cand_internship_hit_rate": _avg_field("cand_internship_hit_rate"),
+        "avg_cand_work_experience_hit_rate": _avg_field("cand_work_experience_hit_rate"),
+        "avg_cand_achievement_hit_rate": _avg_field("cand_achievement_hit_rate"),
+        "avg_cand_learning_signal_hit_rate": _avg_field("cand_learning_signal_hit_rate"),
+        "avg_cand_risk_point_match_rate": _avg_field("cand_risk_point_match_rate"),
+        "avg_cand_evidence_coverage": _avg_field("cand_evidence_coverage"),
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "use_agent": use_agent,
     }
@@ -356,6 +429,17 @@ def run_golden_eval(use_agent: bool = False, limit: int = 0, output: str = None)
     print(f"  面向人群匹配率: {summary['target_audience_match_rate']}%")
     print(f"  要求匹配率: {summary['avg_requirement_match_rate']}%")
     print(f"  证据覆盖率: {summary['avg_evidence_coverage']}%")
+    print(f"  --- 候选人画像字段级指标 ---")
+    print(f"  学历命中率: {summary['avg_cand_education_hit_rate']}%")
+    print(f"  专业命中率: {summary['avg_cand_major_hit_rate']}%")
+    print(f"  技能栈命中率: {summary['avg_cand_skill_hit_rate']}%")
+    print(f"  项目命中率: {summary['avg_cand_project_hit_rate']}%")
+    print(f"  实习命中率: {summary['avg_cand_internship_hit_rate']}%")
+    print(f"  工作经历命中率: {summary['avg_cand_work_experience_hit_rate']}%")
+    print(f"  成果命中率: {summary['avg_cand_achievement_hit_rate']}%")
+    print(f"  学习信号命中率: {summary['avg_cand_learning_signal_hit_rate']}%")
+    print(f"  风险点匹配率: {summary['avg_cand_risk_point_match_rate']}%")
+    print(f"  候选人证据覆盖率: {summary['avg_cand_evidence_coverage']}%")
     print(f"  报告: {out_path}")
     print(f"{'='*50}")
 

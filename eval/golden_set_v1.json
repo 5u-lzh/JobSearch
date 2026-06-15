@@ -22,11 +22,13 @@
     },
     "gold_candidate_profile": {
       "education_keywords": ["本科", "计算机"],
+      "major_keywords": ["计算机科学与技术"],
       "skill_keywords": ["Python", "FastAPI", "MySQL", "Redis", "Docker", "Linux", "Git"],
       "project_keywords": ["求职分析平台", "FastAPI", "MySQL", "Redis", "Docker", "500"],
       "internship_keywords": ["后端开发实习", "管理系统"],
       "work_experience_keywords": [],
       "achievement_keywords": ["500", "日活"],
+      "learning_signal_keywords": [],
       "risk_keywords": []
     },
     "gold_fit": {
@@ -61,11 +63,13 @@
     },
     "gold_candidate_profile": {
       "education_keywords": ["硕士", "工商管理"],
+      "major_keywords": ["工商管理"],
       "skill_keywords": ["PRD", "Axure", "Figma", "SQL", "数据分析"],
       "project_keywords": ["智能客服", "大模型", "需求分析", "竞品调研", "20%"],
       "internship_keywords": [],
       "work_experience_keywords": ["产品经理", "用户增长"],
       "achievement_keywords": ["20%", "满意度"],
+      "learning_signal_keywords": [],
       "risk_keywords": []
     },
     "gold_fit": {
@@ -100,11 +104,13 @@
     },
     "gold_candidate_profile": {
       "education_keywords": ["大专", "软件工程"],
+      "major_keywords": ["软件工程"],
       "skill_keywords": ["JavaScript", "Vue", "HTML5", "CSS3", "Webpack"],
       "project_keywords": ["电商管理后台", "Vue", "商品管理", "数据看板", "1.2秒", "3秒"],
       "internship_keywords": [],
       "work_experience_keywords": ["前端开发工程师", "C端"],
       "achievement_keywords": ["1.2秒", "3秒", "性能优化"],
+      "learning_signal_keywords": [],
       "risk_keywords": ["学历", "框架不匹配"]
     },
     "gold_fit": {
@@ -139,11 +145,13 @@
     },
     "gold_candidate_profile": {
       "education_keywords": ["本科", "数学", "2023"],
+      "major_keywords": ["数学"],
       "skill_keywords": ["SQL", "Python", "Pandas", "Excel"],
       "project_keywords": ["电商用户行为分析", "Pandas", "10万", "用户画像", "购买行为"],
       "internship_keywords": [],
       "work_experience_keywords": [],
       "achievement_keywords": ["10万"],
+      "learning_signal_keywords": [],
       "risk_keywords": ["无实习", "应届生"]
     },
     "gold_fit": {
@@ -178,11 +186,13 @@
     },
     "gold_candidate_profile": {
       "education_keywords": ["硕士", "电子工程"],
+      "major_keywords": ["电子工程"],
       "skill_keywords": ["C", "C++", "ARM", "FreeRTOS", "Linux"],
       "project_keywords": ["STM32", "智能家居", "FreeRTOS", "MQTT"],
       "internship_keywords": [],
       "work_experience_keywords": ["嵌入式开发工程师", "固件开发"],
       "achievement_keywords": [],
+      "learning_signal_keywords": [],
       "risk_keywords": []
     },
     "gold_fit": {
