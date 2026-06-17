@@ -348,6 +348,8 @@ function profileSkillNames(){
 }
 function renderProfileSkills(profile){
   if(!el.profileSkillList)return;
+  const container=$('candidateProfileCard')||el.profileSkillList;
+  if(!container)return;
   userProfileSkills=(profile?.skills||[]).filter(s=>s&&s.skill);
   if(!userProfileSkills.length){
     el.profileSkillList.innerHTML='<div class="gap-subtle">暂未识别到明确技能，可以补充经历或手动填写技能</div>';
@@ -415,16 +417,31 @@ function renderCandidateProfileCard(profile){
   const container=$('candidateProfileCard');
   if(!container||!profile)return;
   const skills=(profile.skill_stack||[]).map(s=>typeof s==='string'?s:(s?.skill||''));
-  let h='<div class="job-profile-card-full" style="border-top-color:var(--green);">';
-  h+='<div class="profile-section">';
-  h+='<div class="profile-section-title">候选人画像</div>';
-  h+='<div class="profile-kv-grid">';
   const edu=profile.education_background||{};
+  const projects=profile.projects||[];
+  const internships=profile.internships||[];
+  const work=profile.work_experiences||[];
+  const achievements=profile.achievements||[];
+  const risks=profile.risk_points||[];
+
+  let h='<div class="job-profile-card-full" style="border-top-color:var(--green);">';
+
+  // 顶部摘要
+  h+='<div class="profile-section">';
+  h+='<div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.5rem;">';
+  h+='<span style="font-size:1rem;font-weight:800;">候选人画像</span>';
+  h+='<span class="profile-confidence '+(profile.confidence||'low')+'">'+esc(profile.confidence||'low')+' 置信度</span>';
+  h+='</div>';
+  h+='<div class="profile-kv-grid">';
   h+='<div class="profile-kv-item"><span>学历</span><b>'+esc(edu.degree||'未识别')+'</b></div>';
+  h+='<div class="profile-kv-item"><span>院校</span><b>'+esc(edu.school||'未识别')+'</b></div>';
   h+='<div class="profile-kv-item"><span>专业</span><b>'+esc(edu.major||'未识别')+'</b></div>';
+  h+='<div class="profile-kv-item"><span>毕业年份</span><b>'+esc(edu.graduation_year||'未识别')+'</b></div>';
   h+='<div class="profile-kv-item"><span>技能数</span><b>'+skills.length+'</b></div>';
-  h+='<div class="profile-kv-item"><span>置信度</span><b>'+esc(profile.confidence||'low')+'</b></div>';
+  h+='<div class="profile-kv-item"><span>项目数</span><b>'+projects.length+'</b></div>';
   h+='</div></div>';
+
+  // 技能栈
   if(skills.length){
     h+='<div class="profile-section">';
     h+='<div class="profile-section-title">技能栈</div>';
@@ -432,6 +449,53 @@ function renderCandidateProfileCard(profile){
     skills.slice(0,15).forEach(s=>{h+='<span class="profile-chip must">'+esc(s)+'</span>';});
     h+='</div></div>';
   }
+
+  // 项目经历
+  if(projects.length){
+    h+='<div class="profile-section">';
+    h+='<div class="profile-section-title">项目经历</div>';
+    h+='<ul class="profile-resp-list">';
+    projects.slice(0,4).forEach(p=>{
+      const desc=p.description||p.name||'';
+      h+='<li>'+esc(desc.length>100?desc.substring(0,100)+'...':desc)+'</li>';
+    });
+    h+='</ul></div>';
+  }
+
+  // 实习/工作经历
+  if(internships.length||work.length){
+    h+='<div class="profile-section">';
+    h+='<div class="profile-section-title">实习/工作经历</div>';
+    h+='<ul class="profile-resp-list">';
+    internships.slice(0,2).forEach(i=>{
+      h+='<li>'+esc((i.description||'').length>80?i.description.substring(0,80)+'...':(i.description||''))+'</li>';
+    });
+    work.slice(0,2).forEach(w=>{
+      h+='<li>'+esc((w.description||'').length>80?w.description.substring(0,80)+'...':(w.description||''))+'</li>';
+    });
+    h+='</ul></div>';
+  }
+
+  // 成果证据
+  if(achievements.length){
+    h+='<div class="profile-section">';
+    h+='<div class="profile-section-title">成果证据</div>';
+    h+='<ul class="profile-resp-list">';
+    achievements.slice(0,3).forEach(a=>{
+      h+='<li>'+esc(a.description||'')+'</li>';
+    });
+    h+='</ul></div>';
+  }
+
+  // 风险点
+  if(risks.length){
+    h+='<div class="profile-section">';
+    h+='<div style="padding:0.5rem 0.7rem;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);border-radius:var(--radius-sm);">';
+    h+='<div style="font-size:0.68rem;font-weight:600;color:var(--gold);margin-bottom:0.3rem;">⚠ 提示</div>';
+    risks.forEach(r=>{h+='<div style="font-size:0.65rem;color:var(--text-dim);">• '+esc(r)+'</div>';});
+    h+='</div></div>';
+  }
+
   h+='</div>';
   container.innerHTML=h;
 }
@@ -1125,106 +1189,192 @@ function renderProfileReport(jobProfile,candidateProfile,fitReport,errorMsg){
   const fitLevel=fit.overall_fit_level||'moderate';
   const fitScore=Math.round(Number(fit.overall_score)||0);
   const mode=currentAnalysisMode||'agent';
-  const modeLabel=mode==='agent'?'FitAnalysisAgent 综合判断':'规则分析兜底';
-  const ruleScore=currentRuleScore?Math.round(currentRuleScore):0;
 
   // ── 辅助函数 ──
   const dimLabel={capability_fit:'能力匹配',experience_relevance:'经历相关',growth_potential:'成长潜力',evidence_strength:'证据充分',risks_and_gaps:'风险短板'};
   const dimIcon={capability_fit:'🎯',experience_relevance:'📂',growth_potential:'🌱',evidence_strength:'📋',risks_and_gaps:'⚠️'};
 
-  // ── 开始渲染 ──
-  let h='<div class="screening-report">'
+  // ── 三卡片布局 ──
+  let h='<div class="fit-report-three-col">';
 
-  // ① 顶部摘要
-  +'<div class="screening-head">'
-  +'<div><div class="screening-title">岗位适配分析</div>'
-  +'<div class="gap-subtle">'+esc(job.job_name||gapCurrentJob)+' · '+esc(job.job_type||'')+' · '+esc(job.employment_type||'')+'</div></div>'
-  +'<div class="screening-score"><span>'+fitScore+'</span><small>/100</small></div>'
-  +'<span class="screening-risk '+riskClass(fitLevel)+'">适配'+riskLabel(fitLevel)+'</span>'
-  +'</div>'
+  // ═══ 卡片1：岗位画像 ═══
+  h+='<div class="fit-report-card job-card">';
+  h+='<div class="fit-report-card-title">岗位画像</div>';
+  h+='<div class="profile-kv-grid">';
+  h+='<div class="profile-kv-item"><span>岗位类型</span><b>'+esc(job.job_type||'未知')+'</b></div>';
+  h+='<div class="profile-kv-item"><span>用工类型</span><b>'+esc(job.employment_type||'未明确')+'</b></div>';
+  h+='<div class="profile-kv-item"><span>面向人群</span><b>'+esc(job.target_audience||'未明确')+'</b></div>';
+  h+='<div class="profile-kv-item"><span>学历要求</span><b>'+esc(job.education_preference||'未明确')+'</b></div>';
+  h+='<div class="profile-kv-item"><span>经验要求</span><b>'+esc(job.experience_requirement||'未明确')+'</b></div>';
+  h+='<div class="profile-kv-item"><span>样本</span><b>'+(job.valid_sample_count||job.sample_count||0)+' 条 JD</b></div>';
+  h+='</div>';
 
-  // 分析模式提示
-  +(mode==='rule_fallback'?'<div class="gap-confidence medium" style="margin-bottom:0.6rem;">ℹ 当前使用规则分析兜底，建议补充更多简历细节或稍后重试 Agent 分析</div>'
-    :'<div style="font-size:0.65rem;color:var(--green);margin-bottom:0.6rem;">✓ FitAnalysisAgent 综合判断</div>')
+  // 职责
+  const resps=job.responsibilities||[];
+  if(resps.length){
+    h+='<div class="profile-section"><div class="profile-section-title">核心职责</div><ul class="profile-resp-list">';
+    resps.slice(0,4).forEach(r=>{h+='<li>'+esc(r)+'</li>';});
+    h+='</ul></div>';
+  }
 
-  // 摘要
-  +'<div class="screening-summary">'+esc(fit.fit_summary||'暂无摘要')+'</div>'
+  // 必备能力
+  const musts=job.must_have_capabilities||[];
+  if(musts.length){
+    h+='<div class="profile-section"><div class="profile-section-title">必备能力</div><div class="profile-chip-row">';
+    musts.slice(0,8).forEach(s=>{h+='<span class="profile-chip must">'+esc(s)+'</span>';});
+    h+='</div></div>';
+  }
 
-  // ── 五维评分 ──
-  +'<div class="fit-dims-section">'
-  +'<div class="gap-block-title">五维评分</div>'
-  +'<div class="fit-dims-grid">';
+  // 加分能力
+  const nices=job.nice_to_have_capabilities||[];
+  if(nices.length){
+    h+='<div class="profile-section"><div class="profile-section-title">加分能力</div><div class="profile-chip-row">';
+    nices.slice(0,6).forEach(s=>{h+='<span class="profile-chip nice">'+esc(s)+'</span>';});
+    h+='</div></div>';
+  }
+
+  // 业务场景
+  const biz=job.business_context||[];
+  if(biz.length){
+    h+='<div class="profile-section"><div class="profile-section-title">业务场景</div><div class="profile-chip-row">';
+    biz.slice(0,4).forEach(s=>{h+='<span class="profile-chip">'+esc(s)+'</span>';});
+    h+='</div></div>';
+  }
+
+  h+='<div class="profile-kv"><span>置信度</span><b>'+esc(job.confidence||'low')+'</b></div>';
+  h+='</div>';
+
+  // ═══ 卡片2：候选人画像 ═══
+  h+='<div class="fit-report-card cand-card">';
+  h+='<div class="fit-report-card-title">候选人画像</div>';
+  const edu=cand.education_background||{};
+  h+='<div class="profile-kv-grid">';
+  h+='<div class="profile-kv-item"><span>学历</span><b>'+esc(edu.degree||'未识别')+'</b></div>';
+  h+='<div class="profile-kv-item"><span>院校</span><b>'+esc(edu.school||'未识别')+'</b></div>';
+  h+='<div class="profile-kv-item"><span>专业</span><b>'+esc(edu.major||'未识别')+'</b></div>';
+  h+='<div class="profile-kv-item"><span>毕业年份</span><b>'+esc(edu.graduation_year||'未识别')+'</b></div>';
+  h+='<div class="profile-kv-item"><span>技能数</span><b>'+(cand.skill_stack||[]).length+'</b></div>';
+  h+='<div class="profile-kv-item"><span>项目数</span><b>'+(cand.projects||[]).length+'</b></div>';
+  h+='</div>';
+
+  // 技能栈
+  const skills=(cand.skill_stack||[]).map(s=>s.skill||s);
+  if(skills.length){
+    h+='<div class="profile-section"><div class="profile-section-title">技能栈</div><div class="profile-chip-row">';
+    skills.slice(0,10).forEach(s=>{h+='<span class="profile-chip must">'+esc(s)+'</span>';});
+    h+='</div></div>';
+  }
+
+  // 项目经历
+  const projs=cand.projects||[];
+  if(projs.length){
+    h+='<div class="profile-section"><div class="profile-section-title">项目经历</div><ul class="profile-resp-list">';
+    projs.slice(0,3).forEach(p=>{
+      const desc=p.description||p.name||'';
+      h+='<li>'+esc(desc.length>80?desc.substring(0,80)+'...':desc)+'</li>';
+    });
+    h+='</ul></div>';
+  }
+
+  // 实习/工作
+  const interns=cand.internships||[];
+  const works=cand.work_experiences||[];
+  if(interns.length||works.length){
+    h+='<div class="profile-section"><div class="profile-section-title">实习/工作经历</div><ul class="profile-resp-list">';
+    interns.slice(0,2).forEach(i=>{h+='<li>'+esc((i.description||'').substring(0,80))+'</li>';});
+    works.slice(0,2).forEach(w=>{h+='<li>'+esc((w.description||'').substring(0,80))+'</li>';});
+    h+='</ul></div>';
+  }
+
+  // 成果
+  const achs=cand.achievements||[];
+  if(achs.length){
+    h+='<div class="profile-section"><div class="profile-section-title">成果证据</div><ul class="profile-resp-list">';
+    achs.slice(0,3).forEach(a=>{h+='<li>'+esc(a.description||'')+'</li>';});
+    h+='</ul></div>';
+  }
+
+  // 风险点
+  const risks=cand.risk_points||[];
+  if(risks.length){
+    h+='<div class="profile-section"><div style="padding:0.4rem 0.6rem;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);border-radius:var(--radius-sm);">';
+    h+='<div style="font-size:0.65rem;font-weight:600;color:var(--gold);margin-bottom:0.2rem;">⚠ 提示</div>';
+    risks.forEach(r=>{h+='<div style="font-size:0.62rem;color:var(--text-dim);">• '+esc(r)+'</div>';});
+    h+='</div></div>';
+  }
+
+  h+='<div class="profile-kv"><span>置信度</span><b>'+esc(cand.confidence||'low')+'</b></div>';
+  h+='</div>';
+
+  // ═══ 卡片3：行动建议 ═══
+  h+='<div class="fit-report-card action-card">';
+  h+='<div class="fit-report-card-title">行动建议</div>';
+
+  // 总分
+  h+='<div style="text-align:center;margin-bottom:0.8rem;">';
+  h+='<div style="font-size:2rem;font-weight:800;color:var(--text);">'+fitScore+'</div>';
+  h+='<div style="font-size:0.7rem;color:var(--text-dim);">适配分 / 100</div>';
+  h+='<span class="screening-risk '+riskClass(fitLevel)+'" style="margin-top:0.3rem;display:inline-block;">适配'+riskLabel(fitLevel)+'</span>';
+  h+='</div>';
+
+  // 五维评分
+  h+='<div class="profile-section"><div class="profile-section-title">五维评分</div>';
   for(const[key,label] of Object.entries(dimLabel)){
     const dim=fit[key]||{};
     const score=Math.round(dim.score||0);
     const level=dim.level||'moderate';
-    const levelCls=level==='strong'?'dim-strong':level==='moderate'?'dim-moderate':'dim-weak';
-    h+='<div class="fit-dim-card '+levelCls+'">'
-      +'<div class="fit-dim-head"><span class="fit-dim-icon">'+(dimIcon[key]||'')+'</span><span class="fit-dim-label">'+esc(label)+'</span></div>'
-      +'<div class="fit-dim-score"><span>'+score+'</span><small>/100</small></div>'
-      +'<div class="fit-dim-level">'+esc(level)+'</div>'
-      +'<div class="fit-dim-summary">'+esc(dim.summary||'暂无说明')+'</div>'
-      +(dim.evidence_refs?.length?'<div class="fit-dim-refs">'+dim.evidence_refs.slice(0,2).map(r=>'<span class="fit-dim-ref">'+esc(r)+'</span>').join('')+'</div>':'')
-      +'</div>';
+    const levelCls=level==='strong'?'color:var(--green)':level==='moderate'?'color:var(--gold)':'color:var(--red)';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:0.2rem 0;font-size:0.72rem;">';
+    h+='<span style="color:var(--text-dim);">'+(dimIcon[key]||'')+' '+esc(label)+'</span>';
+    h+='<span style="font-family:var(--mono);font-weight:600;'+levelCls+'">'+score+' <small style="color:var(--text-muted)">/100</small></span>';
+    h+='</div>';
   }
-  h+='</div></div>';
+  h+='</div>';
 
-  // ── 岗位画像卡 ──
-  h+='<div class="profile-card-grid">'
-  +'<article class="profile-card job-profile-card">'
-  +'<div class="profile-card-head"><div><div class="profile-card-title">岗位画像</div></div><span>'+esc(job.job_type||'未知')+'</span></div>'
-  +'<div class="profile-kv"><span>用工类型</span><b>'+esc(job.employment_type||'未明确')+'</b></div>'
-  +'<div class="profile-kv"><span>面向人群</span><b>'+esc(job.target_audience||'未明确')+'</b></div>'
-  +'<div class="profile-kv"><span>JD 样本</span><b>'+(job.valid_sample_count||job.sample_count||0)+' 条有效'+(job.filtered_sample_count?' (过滤 '+job.filtered_sample_count+' 条低质量)':'')+'</b></div>'
-  +'<div class="profile-kv"><span>学历要求</span><b>'+esc(job.education_preference||'未明确')+'</b></div>'
-  +'<div class="profile-kv"><span>经验要求</span><b>'+esc(job.experience_requirement||'未明确')+'</b></div>'
-  +'<p>必备能力</p><div class="screening-chip-row must">'+chipRow(job.must_have_capabilities||[],'暂无')+'</div>'
-  +'<p>加分能力</p><div class="screening-chip-row">'+chipRow(job.nice_to_have_capabilities||[],'暂无')+'</div>'
-  +'<div class="profile-kv"><span>置信度</span><b>'+esc(job.confidence||'low')+'</b></div>'
-  +(job.confidence==='low'?'<div class="gap-confidence low" style="margin-top:0.4rem;">⚠ 当前岗位样本较少，画像可信度有限</div>':'')
-  +'</article>'
-
-  // ── 候选人画像卡 ──
-  +'<article class="profile-card candidate-profile-card">'
-  +'<div class="profile-card-head"><div><div class="profile-card-title">候选人画像</div></div><span>'+esc((cand.skill_stack||[]).length+' 技能')+'</span></div>'
-  +'<div class="profile-kv"><span>教育背景</span><b>'+esc(((cand.education_background||{}).degree||'')+' '+((cand.education_background||{}).major||'')+' '+((cand.education_background||{}).graduation_year||'')).trim()||'未明确'+'</b></div>'
-  +'<div class="profile-kv"><span>工作年限</span><b>'+esc(cand.experience_years!=null?cand.experience_years+'年':'未知')+(cand.experience_years_confidence==='inferred'?' (推算)':'')+'</b></div>'
-  +'<p>技能栈</p><div class="screening-chip-row matched">'+chipRow((cand.skill_stack||[]).map(s=>s.skill||s).slice(0,12),'暂未识别')+'</div>'
-  +'<p>项目经历</p><ul>'+profileEvidenceList((cand.projects||[]).map(p=>p.description||p.name),'未识别到项目')+'</ul>'
-  +'<p>成果证据</p><ul>'+profileEvidenceList((cand.achievements||[]).map(a=>a.description),'未识别到成果')+'</ul>'
-  +'<div class="profile-kv"><span>置信度</span><b>'+esc(cand.confidence||'low')+'</b></div>'
-  +'</article>'
-  +'</div>'
-
-  // ── 优势 ──
-  +'<div class="screening-grid">';
-
+  // 优势
   const strengths=fit.strengths||[];
+  if(strengths.length){
+    h+='<div class="profile-section"><div class="profile-section-title">✓ 优势</div><ul class="profile-resp-list">';
+    strengths.forEach(s=>{h+='<li>'+esc(s)+'</li>';});
+    h+='</ul></div>';
+  }
+
+  // 差距
   const gaps=fit.gaps||[];
-  if(strengths.length)h+='<div class="screening-card matched"><div class="gap-block-title">✓ 优势</div><ul>'+renderMiniList(strengths)+'</ul></div>';
+  if(gaps.length){
+    h+='<div class="profile-section"><div class="profile-section-title">✕ 差距</div><ul class="profile-resp-list">';
+    gaps.forEach(g=>{h+='<li>'+esc(g)+'</li>';});
+    h+='</ul></div>';
+  }
 
-  // ── 差距 ──
-  if(gaps.length)h+='<div class="screening-card missing"><div class="gap-block-title">✕ 差距</div><ul>'+renderMiniList(gaps)+'</ul></div>';
+  // 学习计划
+  const learning=fit.learning_plan||[];
+  if(learning.length){
+    h+='<div class="profile-section"><div class="profile-section-title">📚 学习计划</div><ul class="profile-resp-list">';
+    learning.slice(0,5).forEach(l=>{h+='<li>'+esc(l)+'</li>';});
+    h+='</ul></div>';
+  }
 
-  // ── 可迁移优势 ──
-  const transferable=fit.transferable_strengths||[];
-  if(transferable.length)h+='<div class="screening-card"><div class="gap-block-title">⇄ 可迁移优势</div><ul>'+renderMiniList(transferable)+'</ul></div>';
+  // 面试策略
+  const interview=fit.interview_strategy||[];
+  if(interview.length){
+    h+='<div class="profile-section"><div class="profile-section-title">🎯 面试策略</div><ul class="profile-resp-list">';
+    interview.slice(0,4).forEach(s=>{h+='<li>'+esc(s)+'</li>';});
+    h+='</ul></div>';
+  }
+
+  // 证据引用
+  const refs=fit.evidence_refs||[];
+  if(refs.length){
+    h+='<div class="profile-section"><div class="profile-section-title">📎 证据引用</div>';
+    h+='<div style="font-size:0.65rem;color:var(--text-muted);max-height:80px;overflow-y:auto;">';
+    refs.slice(0,6).forEach(r=>{h+='<div style="margin-bottom:0.2rem;">• '+esc(r)+'</div>';});
+    h+='</div></div>';
+  }
 
   h+='</div>';
 
-  // ── 学习计划 ──
-  const learning=fit.learning_plan||[];
-  if(learning.length)h+='<div class="screening-card"><div class="gap-block-title">📚 学习计划</div><ul>'+renderMiniList(learning)+'</ul></div>';
-
-  // ── 面试策略 ──
-  const interview=fit.interview_strategy||[];
-  if(interview.length)h+='<div class="screening-card"><div class="gap-block-title">🎯 面试策略</div><ul>'+renderMiniList(interview)+'</ul></div>';
-
-  // ── 证据引用 ──
-  const refs=fit.evidence_refs||[];
-  if(refs.length)h+='<div class="screening-card"><div class="gap-block-title">📎 证据引用</div><ul>'+refs.map(r=>'<li style="font-size:0.72rem;color:var(--text-dim);">'+esc(r)+'</li>').join('')+'</ul></div>';
-
-  // ── 评估反馈按钮（v0.13）──
+  // 评估反馈按钮
   const reportId=fitReport?.id||0;
   if(currentJobProfile?.id)h+=renderEvalButtons('job_profile',currentJobProfile.id);
   if(currentCandidateProfile?.id)h+=renderEvalButtons('candidate_profile',currentCandidateProfile.id);
@@ -1569,14 +1719,14 @@ function applyFeedbackToSkill(skill,job){
   return{cls,community:communityRej||communityImp};
 }
 
-el.btnGapLoad.addEventListener('click',loadGapMarketSkills);
-el.gapJobInput.addEventListener('keydown',e=>{if(e.key==='Enter')loadGapMarketSkills();});
-el.btnGapAnalyze.addEventListener('click',runGapAnalysis);
-el.btnGapClear.addEventListener('click',()=>{
-  el.gapSkillList.querySelectorAll('.gap-skill-check').forEach(c=>{c.checked=false;});
-  el.gapExtraInput.value='';
+if(el.btnGapLoad)el.btnGapLoad.addEventListener('click',loadGapMarketSkills);
+if(el.gapJobInput)el.gapJobInput.addEventListener('keydown',e=>{if(e.key==='Enter')loadGapMarketSkills();});
+if(el.btnGapAnalyze)el.btnGapAnalyze.addEventListener('click',runGapAnalysis);
+if(el.btnGapClear)el.btnGapClear.addEventListener('click',()=>{
+  if(el.gapSkillList)el.gapSkillList.querySelectorAll('.gap-skill-check').forEach(c=>{c.checked=false;});
+  if(el.gapExtraInput)el.gapExtraInput.value='';
 });
-el.btnResumeProfile.addEventListener('click',extractResumeProfile);
+if(el.btnResumeProfile)el.btnResumeProfile.addEventListener('click',extractResumeProfile);
 
 // ── v0.26 Tab 切换 ──
 document.querySelectorAll('.gap-tab').forEach(tab=>{
@@ -1594,13 +1744,14 @@ if(el.resumeFileInput){
     }
   });
 }
-$('gapTagsToggle').addEventListener('click',()=>{
+const gapTagsToggle=$('gapTagsToggle');
+if(gapTagsToggle)gapTagsToggle.addEventListener('click',()=>{
   const tags=$('gapQuickTags');
   const toggle=$('gapTagsToggle');
-  tags.classList.toggle('collapsed');
-  toggle.classList.toggle('open');
+  if(tags)tags.classList.toggle('collapsed');
+  if(toggle)toggle.classList.toggle('open');
 });
-el.btnGapClearFeedback.addEventListener('click',async()=>{
+if(el.btnGapClearFeedback)el.btnGapClearFeedback.addEventListener('click',async()=>{
   if(!gapCurrentJob)return;
   clearJobFeedback(gapCurrentJob);
   if(gapJobProfile)renderMarketProfilePreview(gapJobProfile,'','high',0);
@@ -1612,13 +1763,18 @@ el.btnGapClearFeedback.addEventListener('click',async()=>{
 // ── v0.25 Boss 采集面板事件 ──
 if(el.btnToggleBossCapture){
   el.btnToggleBossCapture.addEventListener('click',()=>{
+    console.log('Boss capture toggle clicked');
     const body=el.bossCaptureBody;
     const btn=el.btnToggleBossCapture;
+    if(!body){console.error('bossCaptureBody not found');return;}
     body.classList.toggle('collapsed');
     btn.textContent=body.classList.contains('collapsed')?'展开':'折叠';
+    console.log('Collapsed:',body.classList.contains('collapsed'));
     // 展开时刷新浏览器状态
     if(!body.classList.contains('collapsed'))refreshBossBrowserStatus();
   });
+}else{
+  console.warn('btnToggleBossCapture not found');
 }
 if(el.btnStartBrowser)el.btnStartBrowser.addEventListener('click',startBossBrowser);
 if(el.btnStopBrowser)el.btnStopBrowser.addEventListener('click',stopBossBrowser);

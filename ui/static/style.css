@@ -249,6 +249,14 @@ del.unverified:hover{opacity:1;color:var(--red);}
 .gap-tab-panel.active{display:block;}
 
 .profile-card-container{margin-top:1rem;}
+.fit-report-three-col{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;}
+.fit-report-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;overflow-y:auto;max-height:80vh;}
+.fit-report-card.job-card{border-top:3px solid var(--blue);}
+.fit-report-card.cand-card{border-top:3px solid var(--green);}
+.fit-report-card.action-card{border-top:3px solid var(--gold);}
+.fit-report-card-title{font-size:0.9rem;font-weight:800;color:var(--text);margin-bottom:0.8rem;padding-bottom:0.5rem;border-bottom:1px solid var(--border);}
+@media(max-width:1200px){.fit-report-three-col{grid-template-columns:1fr 1fr;}}
+@media(max-width:800px){.fit-report-three-col{grid-template-columns:1fr;}}
 .fit-summary-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;}
 .fit-summary-card{padding:0.8rem;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);min-height:80px;}
 .fit-summary-card.has-data{border-top:2px solid var(--blue);}

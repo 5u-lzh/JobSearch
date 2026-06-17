@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>JobLab · AI 求职技能情报平台</title>
-<link rel="stylesheet" href="/static/style.css?v=product-mvp-v0.7-history-fix">
+<link rel="stylesheet" href="/static/style.css?v=product-mvp-v0.34">
 </head>
 <body>
 
@@ -145,6 +145,17 @@
         </div>
         <!-- 岗位画像卡片 -->
         <div id="jobProfileCard" class="profile-card-container"></div>
+        <!-- 兼容旧代码的隐藏元素 -->
+        <div style="display:none;">
+          <div id="gapMarketMeta"></div>
+          <div id="gapSkillList"></div>
+          <div id="gapFeedbackSummary"></div>
+          <div id="profileSkillList"></div>
+          <div id="gapQuickTags" class="radar-quick-tags collapsed"></div>
+          <div id="gapTagsToggle"></div>
+          <button id="btnGapClear">清空</button>
+          <button id="btnGapClearFeedback">清空反馈</button>
+        </div>
       </div>
 
       <!-- Tab 2: 简历画像 -->
@@ -236,6 +247,6 @@
 <!-- Toast -->
 <div id="toastContainer"></div>
 
-<script src="/static/app.js?v=product-mvp-v0.24.1-history-fix"></script>
+<script src="/static/app.js?v=product-mvp-v0.34.2"></script>
 </body>
 </html>
