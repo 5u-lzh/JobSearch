@@ -205,9 +205,10 @@ def test_job_profile_agent_interface():
     """JobProfileAgent 基本接口可用"""
     from services.job_profile_agent import JobProfileAgent
     agent = JobProfileAgent()
-    profile = agent.analyze("Python后端", [])
+    profile, mode = agent.analyze("Python后端", [])
     assert hasattr(profile, "job_name")
     assert hasattr(profile, "must_have_capabilities")
+    assert mode in ("agent", "rule_fallback")
 
 
 def test_build_job_profile_from_jds():

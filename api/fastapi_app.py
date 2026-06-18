@@ -89,7 +89,7 @@ def chat(request: ChatRequest):
     def _run(task, _tid, _uid, _msg):
         task.progress = "分析意图..."
         result = chat_agent_graph.invoke(
-            {"thread_id": _tid, "user_id": _uid, "user_input": _msg, "task": task},
+            {"thread_id": _tid, "user_id": _uid, "user_input": _msg, "task_id": task.task_id},
             config={"configurable": {"thread_id": _tid}},
         )
         return {
@@ -528,7 +528,8 @@ class CandidateProfileRequest(BaseModel):
 
 @app.post("/candidate_profiles/analyze")
 def analyze_candidate_profile(request: CandidateProfileRequest):
-    from services.candidate_profile_service import extract_candidate_profile, save_candidate_profile
+    from services.candidate_profile_agent import extract_candidate_profile_with_agent
+    from services.candidate_profile_service import save_candidate_profile
     from memory.long_term import get_or_create_user
 
     # 自动处理 user_id=0 的情况
@@ -537,14 +538,20 @@ def analyze_candidate_profile(request: CandidateProfileRequest):
         uid = get_or_create_user("default_user")
         logger.info(f"user_id=0, auto-created default user: {uid}")
 
-    profile = extract_candidate_profile(
+    # Agent 优先 + 规则兜底
+    profile, analysis_mode = extract_candidate_profile_with_agent(
         resume_text=request.resume_text,
         user_id=uid,
         resume_filename=request.resume_filename,
         conversation_text=request.conversation_text,
     )
     profile_id = save_candidate_profile(profile, user_id=uid, resume_filename=request.resume_filename)
-    return {"code": 200, "candidate_profile_id": profile_id, "profile": profile.model_dump()}
+    return {
+        "code": 200,
+        "candidate_profile_id": profile_id,
+        "profile": profile.model_dump(),
+        "analysis_mode": analysis_mode,
+    }
 
 
 @app.get("/candidate_profiles/{profile_id}")
@@ -861,14 +868,18 @@ class JobProfileRebuildRequest(BaseModel):
 
 @app.post("/job_profiles/rebuild")
 def rebuild_job_profile(request: JobProfileRebuildRequest):
-    """从最近采集的 JD 重建岗位画像（生成新 job_profile_id，不覆盖旧画像）"""
+    """从最近采集的 JD 重建岗位画像（Agent 优先 + 规则兜底）"""
     from services.job_profile_agent import build_job_profile_from_jds
     from services.job_profile_service import save_job_profile
     profile, doc_ids = build_job_profile_from_jds(
         request.job_name, request.source_platform, request.top_n
     )
     profile_id = save_job_profile(profile, source_doc_ids=doc_ids)
-    return {"code": 200, "job_profile_id": profile_id, "profile": profile.model_dump()}
+    return {
+        "code": 200,
+        "job_profile_id": profile_id,
+        "profile": profile.model_dump(),
+    }
 
 
 # ── 岗位分析（保留 API） ──

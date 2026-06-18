@@ -268,16 +268,22 @@ def _extract_must_have_skills(texts: list[str]) -> list[str]:
     return filter_skill_names(all_skills, job_name="")[:10]
 
 
-def _extract_nice_to_have_skills(texts: list[str]) -> list[str]:
-    """从 JD 加分/优先段落提取加分技能。
+def _extract_nice_to_have_skills(texts: list[str], must_have: list[str] = None) -> list[str]:
+    """从 JD 加分/优先段落提取加分技能（v0.36 质量治理）。
 
-    扫描"加分项/优先/了解/熟悉更佳/有...经验优先"等弱要求句子。
-    排除已在 must_have 中的能力。
+    质量治理规则：
+    1. 必须是可验证的技能、领域经验或业务能力
+    2. 删除招聘话术（优先加分、无相关经验也可）
+    3. 删除人格标签（踏实靠谱、重点看个人价值观）
+    4. 合并语义重复项（B2B + 商务销售 → B2B商务拓展）
+    5. 与 must_have 语义重复时只保留在 must_have
+    6. 最多保留 5 项
     """
     all_skills = []
     seen = set()
+    must_set = {s.lower() for s in (must_have or [])}
 
-    # 弱要求关键词（句中出现则视为 nice_to_have 来源）
+    # 弱要求关键词
     _weak_markers = ("优先", "加分", "熟悉更佳", "了解即可", "了解优先",
                      "有经验者优先", "有以下经验优先", "熟悉优先",
                      "了解", "熟悉更佳",
@@ -288,39 +294,128 @@ def _extract_nice_to_have_skills(texts: list[str]) -> list[str]:
         nth_text = sections["nice_to_have"]
 
         if nth_text:
-            # 从加分段提取
             skills = _extract_skills_from_section(nth_text[:300])
             for s in skills:
-                if s.lower() not in seen:
+                if s.lower() not in seen and s.lower() not in must_set:
                     seen.add(s.lower())
                     all_skills.append(s)
         else:
-            # 兜底：扫描包含弱要求关键词的句子
             for s in re.split(r"[。；\n]", text):
                 s_lower = s.lower()
                 if any(k in s_lower for k in _weak_markers):
-                    # 只提取技术能力词，排除软性要求
                     skills = _extract_skills_from_section(s)
                     for sk in skills:
-                        if sk.lower() not in seen and not _is_soft_skill(sk):
+                        if sk.lower() not in seen and sk.lower() not in must_set and not _is_soft_skill(sk):
                             seen.add(sk.lower())
                             all_skills.append(sk)
 
-        # 额外：扫描"了解XXX"模式（了解大模型、了解RAG等）
+        # 扫描"了解XXX"模式
         for match in re.finditer(r"了解([A-Za-z一-鿿][A-Za-z一-鿿+#./0-9、,，]{1,50})", text):
             phrase = match.group(1).strip()
-            # 按中文逗号/顿号分割多个技能
             for part in re.split(r"[、,，]", phrase):
                 skill = part.strip()
-                # 去掉常见后缀
                 skill = re.sub(r"(等概念|等技术|等框架|等工具|等|概念|技术|框架|工具)$", "", skill).strip()
                 if len(skill) >= 2 and not _is_soft_skill(skill):
                     normalized = _normalize_skill(skill)
-                    if normalized.lower() not in seen:
+                    if normalized.lower() not in seen and normalized.lower() not in must_set:
                         seen.add(normalized.lower())
                         all_skills.append(normalized)
 
-    return filter_skill_names(all_skills, job_name="")[:8]
+    # 质量治理：清理、合并、截断
+    return _clean_nice_to_have(all_skills, must_set)
+
+
+# ── 加分能力质量治理 ──
+
+# 招聘话术 / 人格标签 / 宽松条件 —— 直接删除
+_NTH_NOISE = {
+    "优先加分", "加分", "优先", "无相关经验也可", "无经验也可", "经验不限",
+    "重点看个人价值观", "踏实靠谱", "踏实", "靠谱", "认真负责",
+    "积极主动", "主动性强", "抗压能力强", "自驱力", "自驱",
+    "有意向即可", "愿意学习", "学习意愿", "态度端正",
+    "有责任心", "有上进心", "有热情", "热爱",
+}
+
+# 语义合并规则：(包含关键词列表, 合并后名称)
+_NTH_MERGE_RULES = [
+    ({"b2b", "商务销售", "商务拓展"}, "B2B商务拓展"),
+    ({"b2b", "商务"}, "B2B商务拓展"),
+    ({"企业服务", "企业级", "to b"}, "企业服务经验"),
+    ({"ai产品", "ai 运营", "大模型运营"}, "AI产品运营"),
+    ({"客户增长", "用户增长", "转化"}, "客户增长与转化"),
+    ({"数据驱动", "数据运营", "数据分析运营"}, "数据驱动运营"),
+]
+
+
+def _clean_nice_to_have(raw_skills: list[str], must_set: set[str]) -> list[str]:
+    """清理加分能力：去噪、合并、去重、截断。"""
+    cleaned = []
+    seen = set()
+
+    for skill in raw_skills:
+        s = skill.strip()
+        if not s or len(s) < 2:
+            continue
+        s_lower = s.lower()
+
+        # 1. 删除噪声
+        if s_lower in _NTH_NOISE or any(noise in s_lower for noise in _NTH_NOISE):
+            continue
+
+        # 2. 删除与 must_have 重复的
+        if s_lower in must_set:
+            continue
+
+        # 3. 规范化后缀
+        s = re.sub(r"类经验者?$", "经验", s)
+        s = re.sub(r"优先$", "", s).strip()
+        if not s:
+            continue
+
+        # 4. 去重
+        if s.lower() in seen:
+            continue
+        seen.add(s.lower())
+        cleaned.append(s)
+
+    # 5. 语义合并
+    merged = _merge_nice_to_have(cleaned)
+
+    # 6. 截断
+    return merged[:5]
+
+
+def _merge_nice_to_have(skills: list[str]) -> list[str]:
+    """合并语义重复的加分项。"""
+    if not skills:
+        return skills
+
+    result = []
+    used = set()
+
+    for skill in skills:
+        if skill.lower() in used:
+            continue
+
+        merged = False
+        for keywords, merged_name in _NTH_MERGE_RULES:
+            # 检查当前 skill 是否匹配规则中的关键词
+            if any(kw in skill.lower() for kw in keywords):
+                # 检查是否有其他 skill 也匹配同一规则
+                related = [s for s in skills if s.lower() not in used and any(kw in s.lower() for kw in keywords)]
+                if len(related) >= 2 or skill.lower() != merged_name.lower():
+                    result.append(merged_name)
+                    for r in related:
+                        used.add(r.lower())
+                    used.add(skill.lower())
+                    merged = True
+                    break
+
+        if not merged and skill.lower() not in used:
+            result.append(skill)
+            used.add(skill.lower())
+
+    return result
 
 
 def _is_soft_skill(skill: str) -> bool:
@@ -330,6 +425,8 @@ def _is_soft_skill(skill: str) -> bool:
         "逻辑思维", "表达", "团队合作", "跨部门", "沟通能力", "沟通协作",
         "良好的沟通", "良好的团队", "良好的逻辑", "良好的表达",
         "具备", "使用", "具有", "能力", "经验", "技术", "开发",
+        "踏实靠谱", "认真负责", "积极主动", "自驱力", "有责任心",
+        "有上进心", "有热情", "态度端正", "愿意学习",
     }
     s = skill.strip().lower()
     return s in soft or len(s) < 2
@@ -453,9 +550,7 @@ def extract_job_profile(job_name: str, top_n: int = 20, raw_jd_texts: list[str] 
 
     # ── 必备/加分技能 ──
     must_have = _extract_must_have_skills(texts)
-    nice_to_have = _extract_nice_to_have_skills(texts)
-    must_set = {s.lower() for s in must_have}
-    nice_to_have = [s for s in nice_to_have if s.lower() not in must_set]
+    nice_to_have = _extract_nice_to_have_skills(texts, must_have=must_have)
 
     # ── 学历/专业/经验 ──
     req_info = _extract_education_major_experience(texts)

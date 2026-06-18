@@ -117,7 +117,9 @@ def extract_node(state: AgentState) -> AgentState:
     total_prompt_tokens = 0
     total_completion_tokens = 0
     # 取消检查：开始提取前
-    task = state.get("task")
+    from core.task_manager import task_manager
+    task_id = state.get("task_id")
+    task = task_manager.get(task_id) if task_id else None
     if task and task.is_cancelled():
         raise TaskCancelledError(f"任务 {task.task_id} 已取消")
 
