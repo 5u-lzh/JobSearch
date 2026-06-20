@@ -547,15 +547,19 @@ class BossBrowserCapture:
             ts = int(time.time() * 1000)
             experience = (filters or {}).get("experience", "")
             degree = (filters or {}).get("education", "")
+            query_json = json.dumps(job_name, ensure_ascii=False)
+            city_json = json.dumps(city_code, ensure_ascii=False)
+            experience_json = json.dumps(experience, ensure_ascii=False)
+            degree_json = json.dumps(degree, ensure_ascii=False)
 
             # 在浏览器中执行 fetch
             js_code = f"""
             async () => {{
                 const ts = {ts};
-                const city = '{city_code}';
-                const query = '{job_name}';
-                const experience = '{experience}';
-                const degree = '{degree}';
+                const city = {city_json};
+                const query = {query_json};
+                const experience = {experience_json};
+                const degree = {degree_json};
                 const pageSize = Math.min({max_jobs}, 30);
 
                 // Step 1: 获取岗位列表
@@ -669,6 +673,7 @@ class BossBrowserCapture:
                     jobs.push({{
                         title: job.jobName || '',
                         company: job.brandName || '',
+                        company_size: job.brandScaleName || job.brandScale || job.scaleName || '',
                         salary: job.salaryDesc || '',
                         city: job.cityName || '',
                         experience: job.jobExperience || '',
@@ -677,6 +682,8 @@ class BossBrowserCapture:
                         source_url: job.encryptJobId ? `https://www.zhipin.com/job_detail/${{job.encryptJobId}}.html` : '',
                         hr_name: (bossInfo ? bossInfo.name : '') || job.bossName || '',
                         hr_title: (bossInfo ? bossInfo.title : '') || job.bossTitle || '',
+                        hr_active: (bossInfo ? (bossInfo.activeTimeDesc || bossInfo.activeTime || bossInfo.lastActiveTimeDesc) : '')
+                            || job.bossActiveTimeDesc || job.activeTimeDesc || job.bossOnlineState || '',
                         securityId: job.securityId || '',
                         lid: job.lid || '',
                         encryptJobId: job.encryptJobId || '',

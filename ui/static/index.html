@@ -3,149 +3,246 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>JobLab · AI 求职技能情报平台</title>
-<link rel="stylesheet" href="/static/style.css?v=product-mvp-v0.34">
+<meta name="description" content="JobLab 功能工作台：岗位画像、简历画像、差距分析与求职适配报告。">
+<title>JobLab · 求职适配工作台</title>
+<link rel="stylesheet" href="/static/style.css?v=product-mvp-v0.41">
 </head>
 <body>
 
-<!-- 星空粒子背景 -->
 <canvas id="starCanvas"></canvas>
 
-<!-- ═══ 左侧图标导航 (64px) ═══ -->
-<nav id="navBar">
-  <div class="nav-logo">JL</div>
-  <div class="nav-icons">
-    <button class="nav-icon active" data-view="chat" title="智能对话">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-    </button>
-    <button class="nav-icon" data-view="radar" title="技能雷达">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
-    </button>
-    <button class="nav-icon" data-view="gap" title="技能差距">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-7"/><path d="M7 19v-4"/><path d="M11 19v-8"/><path d="M15 19v-5"/><path d="M19 19V7"/></svg>
-    </button>
-    <button class="nav-icon" data-view="research" title="深度研究">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-    </button>
-  </div>
-  <div class="nav-bottom">
-    <button class="nav-icon" data-view="user" title="用户中心">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-    </button>
-  </div>
-</nav>
+<aside id="navBar" class="app-sidebar">
+  <a class="app-brand" href="/" aria-label="返回 JobLab 首页">
+    <span class="nav-logo">JL</span>
+    <span class="app-brand-copy">
+      <strong>Job<span>Lab</span></strong>
+      <small>求职适配工作台</small>
+    </span>
+  </a>
 
-<!-- ═══ 会话列表栏 (220px) ═══ -->
-<aside id="sessionPanel">
-  <div class="session-header">
-    <span class="session-title">对话</span>
-    <button id="btnNewChat" class="btn-new-chat" title="新对话">+</button>
+  <div class="sidebar-section-label">工作空间</div>
+  <div class="nav-icons">
+    <button class="nav-icon active" data-view="gap" title="适配分析工作台">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-7"/><path d="M7 19v-4"/><path d="M11 19v-8"/><path d="M15 19v-5"/><path d="M19 19V7"/></svg>
+      <span>适配分析</span>
+    </button>
+    <button class="nav-icon" data-view="radar" title="岗位技能雷达">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+      <span>技能雷达</span>
+    </button>
   </div>
-  <div class="session-list" id="convList"></div>
+
+  <div class="sidebar-guide">
+    <span class="sidebar-guide-kicker">当前主流程</span>
+    <strong>岗位 → 简历 → 差距</strong>
+    <p>先建立两份画像，再生成有证据的行动建议。</p>
+  </div>
+
+  <div class="nav-bottom">
+    <button class="nav-icon" data-view="user" title="用户与数据">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span>用户与数据</span>
+    </button>
+    <a class="sidebar-home-link" href="/">返回产品首页</a>
+  </div>
 </aside>
 
-<!-- ═══ 主内容区 ═══ -->
 <main id="mainContent">
-  <!-- 视图: 智能对话 -->
-  <div id="viewChat" class="view active">
+  <header class="app-topbar">
+    <div>
+      <span class="topbar-eyebrow">JobLab Workspace</span>
+      <h1 id="workspaceTitle">求职适配分析</h1>
+    </div>
+    <div class="topbar-meta">
+      <span class="service-indicator"><i></i> 服务已连接</span>
+      <a href="/" class="topbar-link">产品首页</a>
+    </div>
+  </header>
+
+  <!-- legacy: 保留调用所需节点，不作为主产品入口 -->
+  <div id="viewChat" class="view legacy-view" style="display:none;">
     <div id="messageList"></div>
     <div id="rankingViewChat" class="ranking-inline" style="display:none"></div>
     <div id="inputArea">
-      <input type="text" id="chatInput" placeholder="输入消息，Enter 发送，Shift+Enter 换行" autocomplete="off" />
+      <input type="text" id="chatInput" placeholder="输入消息" autocomplete="off">
       <button id="btnSend">发送</button>
     </div>
+    <div id="convList"></div>
+    <button id="btnNewChat">新对话</button>
   </div>
 
-  <!-- 视图: 技能雷达 -->
-  <div id="viewRadar" class="view">
-    <div class="radar-top">
+  <section id="viewRadar" class="view">
+    <div class="view-heading">
+      <div>
+        <span class="view-kicker">岗位市场</span>
+        <h2>技能需求雷达</h2>
+        <p>查看已分析岗位的技能频次、样本规模和数据置信度。</p>
+      </div>
+    </div>
+    <div class="radar-top surface-panel">
       <div class="radar-search">
-        <input type="text" id="radarInput" placeholder="输入岗位名称，查看技能全景..." autocomplete="off" />
-        <button id="btnRadarSearch">分析</button>
+        <input type="text" id="radarInput" placeholder="输入岗位名称，例如 Python 后端" autocomplete="off">
+        <button id="btnRadarSearch">查看雷达</button>
       </div>
       <div class="radar-tags-toggle" id="radarTagsToggle">
-        <span class="tags-toggle-label">已分析岗位</span>
+        <span class="tags-toggle-label">选择已分析岗位</span>
         <svg class="tags-toggle-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
       </div>
       <div class="radar-quick-tags collapsed" id="radarQuickTags"></div>
     </div>
-    <div class="radar-body" id="radarBody">
-      <div class="radar-empty">◇ 输入岗位名称，探索技能全景</div>
+    <div class="radar-body surface-panel" id="radarBody">
+      <div class="radar-empty">输入岗位名称，查看市场技能结构</div>
     </div>
-  </div>
+  </section>
 
-  <!-- 视图: 适配分析工作台 -->
-  <div id="viewGap" class="view">
-    <!-- 顶部：岗位输入 + 流程状态 -->
-    <div class="gap-top">
-      <div class="gap-search">
-        <input type="text" id="gapJobInput" placeholder="目标岗位，例如 Python后端" autocomplete="off" />
-        <button id="btnGapLoad">加载技能</button>
+  <section id="viewGap" class="view active">
+    <div class="workbench-hero">
+      <div class="workbench-hero-copy">
+        <span class="view-kicker">Evidence-based job fit</span>
+        <h2>看清你和目标岗位之间的真实距离</h2>
+        <p>用真实 JD 建立岗位画像，用简历建立候选人画像，再从五个维度生成差距与行动建议。</p>
+      </div>
+      <div class="gap-top">
+        <label for="gapJobInput">目标岗位</label>
+        <div class="gap-search">
+          <input type="text" id="gapJobInput" placeholder="例如：AI 产品经理、Python 后端" autocomplete="off">
+          <button id="btnGapLoad">加载岗位</button>
+        </div>
       </div>
       <div class="gap-stepper" id="gapStepper">
-        <span class="step" data-step="1">① 岗位画像</span>
-        <span class="step-arrow">→</span>
-        <span class="step" data-step="2">② 简历画像</span>
-        <span class="step-arrow">→</span>
-        <span class="step" data-step="3">③ 适配分析</span>
+        <span class="step" data-step="1"><b>01</b> 岗位画像</span>
+        <span class="step-arrow"></span>
+        <span class="step" data-step="2"><b>02</b> 简历画像</span>
+        <span class="step-arrow"></span>
+        <span class="step" data-step="3"><b>03</b> 差距分析</span>
       </div>
     </div>
 
-    <!-- Tab 内容区 -->
     <div class="gap-tabs">
-      <div class="gap-tab-bar">
-        <button class="gap-tab active" data-tab="capture">岗位采集</button>
-        <button class="gap-tab" data-tab="resume">简历画像</button>
-        <button class="gap-tab" data-tab="fit">适配分析</button>
-        <button class="gap-tab" data-tab="history">历史报告</button>
+      <div class="gap-tab-bar" role="tablist" aria-label="适配分析流程">
+        <button class="gap-tab active" data-tab="capture" role="tab">
+          <span>01</span><b>准备岗位</b><small>采集或导入 JD</small>
+        </button>
+        <button class="gap-tab" data-tab="resume" role="tab">
+          <span>02</span><b>解析简历</b><small>建立候选人画像</small>
+        </button>
+        <button class="gap-tab" data-tab="fit" role="tab">
+          <span>03</span><b>差距分析</b><small>生成适配报告</small>
+        </button>
+        <button class="gap-tab" data-tab="history" role="tab">
+          <span>04</span><b>历史报告</b><small>查看与重新分析</small>
+        </button>
       </div>
 
-      <!-- Tab 1: 岗位采集 -->
       <div class="gap-tab-panel active" id="tabCapture">
-        <!-- Boss 采集表单 -->
-        <div class="boss-capture-panel" id="bossCapturePanel">
-          <div class="boss-capture-header">
-            <span class="gap-label">Boss 岗位采集</span>
-            <button class="gap-mini-btn" id="btnToggleBossCapture">展开</button>
+        <div class="panel-heading">
+          <div>
+            <span class="panel-index">STEP 01</span>
+            <h3>准备目标岗位</h3>
+            <p>推荐从多条完整 JD 生成岗位画像；没有浏览器采集条件时，可直接粘贴 JD。</p>
           </div>
-          <div class="boss-capture-body collapsed" id="bossCaptureBody">
-            <div class="boss-browser-controls">
-              <span class="boss-browser-status" id="bossBrowserStatus">浏览器: 未启动</span>
-              <button class="boss-capture-btn start" id="btnStartBrowser">启动浏览器</button>
-              <button class="boss-capture-btn stop" id="btnStopBrowser" style="display:none;">停止浏览器</button>
-              <button class="boss-capture-btn retry" id="btnRetryAfterLogin" style="display:none;">我已完成登录，重试采集</button>
+          <div class="panel-status">岗位数据决定后续分析质量</div>
+        </div>
+
+        <div class="capture-layout">
+          <div class="boss-capture-panel surface-panel" id="bossCapturePanel">
+            <div class="boss-capture-header">
+              <div>
+                <span class="section-overline">Boss 浏览器采集</span>
+                <h4>从真实招聘页面获取岗位样本</h4>
+              </div>
+              <button class="gap-mini-btn" id="btnToggleBossCapture">展开设置</button>
             </div>
-            <div class="boss-capture-form">
-              <input type="text" id="bossJobInput" placeholder="岗位关键词，例如 AI Agent" />
-              <input type="text" id="bossCityInput" placeholder="城市，例如 杭州" />
-              <select id="bossExpFilter">
-                <option value="">经验不限</option>
-                <option value="应届">应届</option>
-                <option value="1-3年">1-3年</option>
-                <option value="3-5年">3-5年</option>
-                <option value="5-10年">5-10年</option>
-              </select>
-              <select id="bossEduFilter">
-                <option value="">学历不限</option>
-                <option value="大专">大专</option>
-                <option value="本科">本科</option>
-                <option value="硕士">硕士</option>
-              </select>
-              <input type="number" id="bossMaxJobs" value="10" min="1" max="30" placeholder="数量" />
-              <button class="boss-capture-btn" id="btnBossCapture">启动采集</button>
+            <div class="boss-capture-body collapsed" id="bossCaptureBody">
+              <div class="boss-browser-controls">
+                <span class="boss-browser-status" id="bossBrowserStatus">浏览器：未启动</span>
+                <button class="boss-capture-btn start" id="btnStartBrowser">启动浏览器</button>
+                <button class="boss-capture-btn stop" id="btnStopBrowser" style="display:none;">停止浏览器</button>
+                <button class="boss-capture-btn retry" id="btnRetryAfterLogin" style="display:none;">登录完成，重新检测</button>
+              </div>
+              <div class="boss-capture-form">
+                <div class="capture-query-row">
+                  <label class="capture-field">
+                    <span>主要岗位</span>
+                    <input type="text" id="bossJobInput" placeholder="例如：AI 产品经理">
+                  </label>
+                  <label class="capture-field">
+                    <span>补充岗位关键词 <em>可选</em></span>
+                    <input type="text" id="bossExtraJobInput" placeholder="例如：大模型产品、智能体产品">
+                  </label>
+                </div>
+                <p class="capture-query-help">多个补充关键词用逗号分隔，系统会分别采集并合并为同一岗位样本。</p>
+                <div class="capture-filter-row">
+                  <label class="capture-field">
+                    <span>城市</span>
+                    <input type="text" id="bossCityInput" placeholder="不限">
+                  </label>
+                  <label class="capture-field">
+                    <span>经验要求</span>
+                    <select id="bossExpFilter">
+                      <option value="">经验不限</option>
+                      <option value="应届">应届</option>
+                      <option value="1-3年">1-3年</option>
+                      <option value="3-5年">3-5年</option>
+                      <option value="5-10年">5-10年</option>
+                    </select>
+                  </label>
+                  <label class="capture-field">
+                    <span>学历要求</span>
+                    <select id="bossEduFilter">
+                      <option value="">学历不限</option>
+                      <option value="大专">大专</option>
+                      <option value="本科">本科</option>
+                      <option value="硕士">硕士</option>
+                    </select>
+                  </label>
+                  <label class="capture-field">
+                    <span>公司规模</span>
+                    <select id="bossCompanySizeFilter">
+                      <option value="">规模不限</option>
+                      <option value="0-20人">0-20 人</option>
+                      <option value="20-99人">20-100 人</option>
+                      <option value="100-499人">100-500 人</option>
+                      <option value="500-999人">500-1000 人</option>
+                      <option value="1000-9999人">1000-10000 人</option>
+                      <option value="10000人以上">10000 人以上</option>
+                    </select>
+                  </label>
+                  <label class="capture-field">
+                    <span>HR 活跃度</span>
+                    <select id="bossHrActivityFilter">
+                      <option value="">活跃度不限</option>
+                      <option value="recent">刚刚 / 在线</option>
+                      <option value="today">今日活跃</option>
+                      <option value="3d">3 天内活跃</option>
+                      <option value="7d">7 天内活跃</option>
+                      <option value="30d">30 天内活跃</option>
+                    </select>
+                  </label>
+                  <label class="capture-field capture-field-count">
+                    <span>样本数</span>
+                    <input type="number" id="bossMaxJobs" value="10" min="1" max="30" aria-label="采集数量">
+                  </label>
+                  <button class="boss-capture-btn capture-submit" id="btnBossCapture">开始采集</button>
+                </div>
+              </div>
+              <div id="bossCaptureStatus" class="boss-capture-status"></div>
+              <button class="boss-capture-btn rebuild" id="btnRebuildProfile" style="display:none;">重新生成岗位画像</button>
             </div>
+          </div>
+
+          <div class="manual-import-card surface-panel">
+            <span class="section-overline">手动导入</span>
+            <h4>直接粘贴完整 JD</h4>
+            <p>适合快速测试、招聘网站风控或已有岗位文本的场景。</p>
             <div class="boss-capture-alt">
-              <span class="gap-subtle">或手动粘贴 JD 文本：</span>
-              <textarea id="bossManualJdInput" rows="3" placeholder="粘贴 JD 原文..."></textarea>
-              <button class="gap-mini-btn" id="btnBossManualImport">导入 JD</button>
+              <textarea id="bossManualJdInput" rows="7" placeholder="粘贴岗位职责、任职要求、加分项等完整内容"></textarea>
+              <button class="gap-mini-btn primary" id="btnBossManualImport">导入并生成画像</button>
             </div>
-            <div id="bossCaptureStatus" class="boss-capture-status"></div>
-            <button class="boss-capture-btn rebuild" id="btnRebuildProfile" style="display:none;">重新生成画像</button>
           </div>
         </div>
-        <!-- 岗位画像卡片 -->
+
         <div id="jobProfileCard" class="profile-card-container"></div>
-        <!-- 兼容旧代码的隐藏元素 -->
         <div style="display:none;">
           <div id="gapMarketMeta"></div>
           <div id="gapSkillList"></div>
@@ -158,95 +255,127 @@
         </div>
       </div>
 
-      <!-- Tab 2: 简历画像 -->
       <div class="gap-tab-panel" id="tabResume">
-        <div class="resume-section">
-          <div class="gap-section-head">
-            <div>
-              <div class="gap-label">简历画像</div>
-              <div class="gap-subtle">粘贴简历或上传文本版 PDF/DOCX/TXT</div>
+        <div class="panel-heading">
+          <div>
+            <span class="panel-index">STEP 02</span>
+            <h3>建立候选人画像</h3>
+            <p>系统会提取技能、项目、经历、成果证据和风险点，不使用年龄或婚育等敏感信息评分。</p>
+          </div>
+          <div class="panel-status">支持 PDF、DOCX、TXT</div>
+        </div>
+
+        <div class="resume-layout">
+          <div class="resume-section surface-panel">
+            <span class="section-overline">简历输入</span>
+            <h4>上传文件或粘贴文本</h4>
+            <textarea id="resumeTextInput" rows="12" placeholder="粘贴简历、项目经历，或描述你做过的项目"></textarea>
+            <div class="gap-profile-actions">
+              <label class="file-picker" for="resumeFileInput">选择简历文件</label>
+              <input type="file" id="resumeFileInput" accept=".pdf,.docx,.txt">
+              <button class="gap-mini-btn primary" id="btnResumeProfile">识别候选人画像</button>
+            </div>
+            <div id="resumeParseStatus" class="gap-subtle"></div>
+          </div>
+          <div class="resume-preview-shell surface-panel">
+            <span class="section-overline">解析结果</span>
+            <h4>候选人画像预览</h4>
+            <div id="candidateProfileCard" class="profile-card-container">
+              <div class="empty-state">
+                <strong>等待简历输入</strong>
+                <p>上传或粘贴简历后，这里会展示技能、项目和成果证据。</p>
+              </div>
             </div>
           </div>
-          <textarea id="resumeTextInput" rows="6" placeholder="粘贴简历、项目经历，或描述你做过的项目"></textarea>
-          <div class="gap-profile-actions">
-            <input type="file" id="resumeFileInput" accept=".pdf,.docx,.txt,.md" />
-            <button class="gap-mini-btn" id="btnResumeProfile">识别画像</button>
-          </div>
-          <div id="resumeParseStatus" class="gap-subtle" style="margin-top:0.3rem;"></div>
         </div>
-        <!-- 候选人画像卡片 -->
-        <div id="candidateProfileCard" class="profile-card-container"></div>
       </div>
 
-      <!-- Tab 3: 适配分析 -->
       <div class="gap-tab-panel" id="tabFit">
-        <div class="fit-summary-row">
-          <div id="fitJobSummary" class="fit-summary-card">
-            <div class="gap-label">岗位画像</div>
-            <div class="gap-subtle">请先完成岗位采集</div>
+        <div class="panel-heading">
+          <div>
+            <span class="panel-index">STEP 03</span>
+            <h3>差距分析与行动建议</h3>
+            <p>不是简单关键词匹配。系统综合能力、经历、成长、证据和风险，解释为什么匹配以及下一步做什么。</p>
           </div>
-          <div id="fitCandSummary" class="fit-summary-card">
-            <div class="gap-label">候选人画像</div>
-            <div class="gap-subtle">请先上传简历</div>
+          <div class="panel-status">五维可解释分析</div>
+        </div>
+
+        <div class="analysis-setup">
+          <div class="fit-summary-row">
+            <div id="fitJobSummary" class="fit-summary-card">
+              <span class="section-overline">岗位画像</span>
+              <strong>尚未准备</strong>
+              <p>请先采集或导入目标岗位 JD。</p>
+            </div>
+            <div id="fitCandSummary" class="fit-summary-card">
+              <span class="section-overline">候选人画像</span>
+              <strong>尚未准备</strong>
+              <p>请先上传或粘贴简历。</p>
+            </div>
+          </div>
+          <div class="analysis-action-card">
+            <div class="gap-extra">
+              <label for="gapExtraInput">补充技能或经历（可选）</label>
+              <textarea id="gapExtraInput" rows="2" placeholder="例如：Python、SQL、用户研究"></textarea>
+            </div>
+            <button class="gap-analyze-btn" id="btnGapAnalyze">生成差距分析报告</button>
           </div>
         </div>
-        <div class="gap-extra">
-          <div class="gap-label">补充技能</div>
-          <textarea id="gapExtraInput" rows="2" placeholder="Python, MySQL, Git（可选）"></textarea>
-        </div>
-        <button class="gap-analyze-btn" id="btnGapAnalyze">分析适配度</button>
+
         <div id="gapResult" class="gap-result-area">
-          <div class="gap-result-empty">完成岗位采集和简历画像后，点击上方按钮分析适配度</div>
+          <div class="empty-state report-empty">
+            <span>03</span>
+            <strong>准备好两份画像后开始分析</strong>
+            <p>报告将展示适配分、五维评分、优势、差距、学习计划和面试策略。</p>
+          </div>
         </div>
       </div>
 
-      <!-- Tab 4: 历史报告 -->
       <div class="gap-tab-panel" id="tabHistory">
+        <div class="panel-heading">
+          <div>
+            <span class="panel-index">REPORTS</span>
+            <h3>历史适配报告</h3>
+            <p>继续查看过去的判断，或基于同一岗位和简历重新生成报告。</p>
+          </div>
+        </div>
         <div id="fitReportHistory" class="fit-history-list">
-          <div style="font-size:0.68rem;color:var(--text-muted);padding:0.4rem;">暂无历史报告</div>
+          <div class="empty-state"><strong>暂无历史报告</strong><p>完成一次差距分析后，报告会保存在这里。</p></div>
         </div>
       </div>
     </div>
-  </div>
+  </section>
 
-  <!-- 视图: 深度研究 -->
-  <div id="viewResearch" class="view">
+  <div id="viewResearch" class="view legacy-view" style="display:none;">
     <div class="research-top">
-      <textarea id="researchInput" placeholder="描述你想研究的内容，例如：帮我全面分析深圳AI大模型方向的求职情况" rows="2"></textarea>
+      <textarea id="researchInput" rows="2"></textarea>
       <button id="btnResearch">开始研究</button>
     </div>
     <div class="research-timeline" id="researchTimeline"></div>
     <div class="research-body" id="researchBody"></div>
   </div>
 
-  <!-- 视图: 用户中心 -->
-  <div id="viewUser" class="view">
-    <div class="user-hero">
-      <div class="user-avatar" id="userAvatar">U</div>
-      <div>
-        <div class="user-name" id="userName"></div>
-        <div class="user-meta" id="userMeta"></div>
+  <section id="viewUser" class="view">
+    <div class="view-heading">
+      <div><span class="view-kicker">Workspace data</span><h2>用户与数据</h2><p>切换本地用户，查看当前分析数据概览。</p></div>
+    </div>
+    <div class="user-panel surface-panel">
+      <div class="user-hero">
+        <div class="user-avatar" id="userAvatar">U</div>
+        <div><div class="user-name" id="userName"></div><div class="user-meta" id="userMeta"></div></div>
+      </div>
+      <div class="user-stats" id="userStats"></div>
+      <div class="user-switch-section">
+        <div class="section-title">切换用户</div>
+        <div class="user-switch-list" id="userSwitchList"></div>
+        <button class="btn-switch-add" id="btnAddUser">创建新用户</button>
       </div>
     </div>
-    <div class="user-stats" id="userStats"></div>
-    <div class="user-switch-section">
-      <div class="section-title">切换用户</div>
-      <div class="user-switch-list" id="userSwitchList"></div>
-      <button class="btn-switch-add" id="btnAddUser">+ 创建新用户</button>
-    </div>
-  </div>
+  </section>
 </main>
 
-<!-- ═══ 情报面板 (260px) ═══ -->
-<aside id="insightPanel">
-  <div id="insightContent">
-    <div class="insight-empty">完成分析后，情报将在此展示</div>
-  </div>
-</aside>
-
-<!-- Toast -->
 <div id="toastContainer"></div>
 
-<script src="/static/app.js?v=product-mvp-v0.34.2"></script>
+<script src="/static/app.js?v=product-mvp-v0.41"></script>
 </body>
 </html>

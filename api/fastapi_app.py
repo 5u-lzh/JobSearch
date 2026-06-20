@@ -23,6 +23,7 @@ logger = get_logger(__name__)
 db = registry.db_tool
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "ui" / "static"
+LANDING_PAGE = Path(__file__).resolve().parent.parent / "joblab-landing-page-v2.html"
 
 app = FastAPI(title="求职技能分析助手")
 
@@ -40,6 +41,11 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 @app.get("/")
 def index():
+    return FileResponse(str(LANDING_PAGE))
+
+
+@app.get("/app")
+def workbench():
     return FileResponse(str(STATIC_DIR / "index.html"))
 
 
@@ -224,7 +230,10 @@ class ResearchRequest(BaseModel):
 
 @app.post("/research")
 def research(request: ResearchRequest):
-    """直接从已有数据库搜索多维度信息，LLM 生成研究报告"""
+    """直接从已有数据库搜索多维度信息，LLM 生成研究报告。
+    Legacy capability: no longer exposed as a standalone UI.
+    Reserved for future job/profile/report contextual research.
+    """
     from graphs.research import research_graph
     import uuid
 
@@ -650,6 +659,140 @@ def get_fit_analysis(report_id: int, user_id: int = Query(0)):
     return {"code": 200, **detail}
 
 
+# ── v0.37 适配顾问 ──
+class AdvisorRequest(BaseModel):
+    user_id: int = 0
+    question: str = ""
+
+
+@app.post("/fit_analysis_reports/{report_id}/advisor")
+def ask_fit_advisor(report_id: int, request: AdvisorRequest):
+    """基于适配报告的上下文顾问"""
+    from services.fit_report_history_service import get_fit_report_detail
+    from models.profile import FitAnalysisReport
+    from models.database import SessionLocal as _SL
+    from services.agent_common import call_llm, parse_json_from_llm
+
+    # 验证报告存在且属于当前用户
+    detail = get_fit_report_detail(report_id, user_id=request.user_id)
+    if not detail:
+        return {"code": 404, "message": "报告不存在或无权访问"}
+
+    report = detail.get("report", {})
+    job_profile = detail.get("job_profile", {})
+    candidate_profile = detail.get("candidate_profile", {})
+
+    question = (request.question or "").strip()
+    if not question:
+        return {"code": 400, "message": "请输入问题"}
+
+    # 构建上下文
+    context = _build_advisor_context(report, job_profile, candidate_profile)
+
+    # 优先 LLM
+    prompt = f"""你是求职适配顾问。基于以下岗位画像、候选人画像和适配分析报告，回答用户问题。
+
+## 规则
+1. 只基于输入的画像和报告回答，不得编造信息。
+2. 没有证据时明确说明"当前画像中没有足够证据"。
+3. 不使用年龄、性别、婚育等敏感信息。
+4. 回答要具体、可执行，引用报告中的具体字段。
+
+## 上下文
+{context}
+
+## 用户问题
+{question}
+
+请直接回答，不要输出 JSON。"""
+
+    answer = call_llm(prompt, max_tokens=1000, timeout=30)
+    analysis_mode = "agent"
+
+    if not answer:
+        # 规则兜底
+        answer = _advisor_rule_fallback(question, report)
+        analysis_mode = "rule_fallback"
+
+    # 证据引用
+    evidence_refs = report.get("evidence_refs", [])[:5]
+
+    return {
+        "code": 200,
+        "report_id": report_id,
+        "answer": answer,
+        "analysis_mode": analysis_mode,
+        "evidence_refs": evidence_refs,
+    }
+
+
+def _build_advisor_context(report: dict, job_profile: dict, candidate_profile: dict) -> str:
+    """构建顾问上下文"""
+    lines = []
+    lines.append(f"### 适配报告")
+    lines.append(f"- 适配等级: {report.get('overall_fit_level', '未知')}")
+    lines.append(f"- 综合分: {report.get('overall_score', 0)}")
+    lines.append(f"- 摘要: {report.get('fit_summary', '')}")
+    lines.append(f"- 优势: {', '.join(report.get('strengths', []))}")
+    lines.append(f"- 差距: {', '.join(report.get('gaps', []))}")
+    lines.append(f"- 学习计划: {', '.join(report.get('learning_plan', []))}")
+    lines.append(f"- 面试策略: {', '.join(report.get('interview_strategy', []))}")
+    lines.append(f"- 证据引用: {', '.join(report.get('evidence_refs', []))}")
+    lines.append("")
+    lines.append(f"### 岗位画像")
+    lines.append(f"- 岗位: {job_profile.get('job_name', '')}")
+    lines.append(f"- 必备能力: {', '.join(job_profile.get('must_have_capabilities', []))}")
+    lines.append(f"- 加分能力: {', '.join(job_profile.get('nice_to_have_capabilities', []))}")
+    lines.append(f"- 职责: {', '.join(job_profile.get('responsibilities', []))}")
+    lines.append("")
+    lines.append(f"### 候选人画像")
+    edu = candidate_profile.get("education_background", {})
+    lines.append(f"- 教育: {edu.get('degree', '')} {edu.get('major', '')} {edu.get('school', '')}")
+    skills = [s.get("skill", s) if isinstance(s, dict) else str(s) for s in candidate_profile.get("skill_stack", [])]
+    lines.append(f"- 技能: {', '.join(skills[:10])}")
+    return "\n".join(lines)
+
+
+def _advisor_rule_fallback(question: str, report: dict) -> str:
+    """规则兜底回答"""
+    q = question.lower()
+    level = report.get("overall_fit_level", "未知")
+    score = report.get("overall_score", 0)
+    strengths = report.get("strengths", [])
+    gaps = report.get("gaps", [])
+    learning = report.get("learning_plan", [])
+    interview = report.get("interview_strategy", [])
+
+    if "适配等级" in q or "为什么" in q:
+        return f"综合适配等级为 **{level}**（{score}分）。" + (
+            f"主要优势: {'、'.join(strengths[:3])}。" if strengths else ""
+        ) + (f"主要差距: {'、'.join(gaps[:3])}。" if gaps else "")
+
+    if "优先补" in q or "差距" in q:
+        if gaps:
+            return f"最应该优先补充的差距: {'、'.join(gaps[:5])}。" + (
+                f"建议学习计划: {'、'.join(learning[:3])}。" if learning else ""
+            )
+        return "当前画像中没有明确的差距记录。"
+
+    if "学习" in q or "计划" in q:
+        if learning:
+            return f"建议学习计划:\n" + "\n".join(f"- {l}" for l in learning[:5])
+        return "当前画像中没有足够证据生成学习计划。"
+
+    if "面试" in q:
+        if interview:
+            return f"面试准备建议:\n" + "\n".join(f"- {s}" for s in interview[:5])
+        return "当前画像中没有足够证据生成面试建议。"
+
+    if "简历" in q or "优化" in q:
+        if gaps:
+            return f"建议在简历中补充以下方面: {'、'.join(gaps[:3])}。"
+        return "当前画像中没有明确的优化建议。"
+
+    return f"综合适配等级为 {level}（{score}分）。如需更详细的分析，请提出具体问题。"
+
+
 # ── 适配报告历史管理 ──
 @app.get("/fit_analysis_reports")
 def list_fit_reports_endpoint(user_id: int = Query(0), job_name: str = Query(""), limit: int = Query(20, ge=1, le=50), offset: int = Query(0, ge=0)):
@@ -821,6 +964,7 @@ def open_boss_login_page():
 
 class BossCaptureRequest(BaseModel):
     job_name: str
+    extra_job_keywords: list[str] = Field(default_factory=list)
     city: str = ""
     max_jobs: int = Field(default=10, ge=1, le=30)
     filters: dict = Field(default_factory=dict)
@@ -832,6 +976,7 @@ def boss_capture(request: BossCaptureRequest):
     from services.boss_capture_service import capture_boss_jds, BossCaptureRequest as _Req
     req = _Req(
         job_name=request.job_name,
+        extra_job_keywords=request.extra_job_keywords,
         city=request.city,
         max_jobs=request.max_jobs,
         filters=request.filters,

@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 import hashlib
+import math
+import re
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -24,9 +26,10 @@ logger = get_logger(__name__)
 class BossCaptureRequest(BaseModel):
     """Boss 采集请求参数"""
     job_name: str
+    extra_job_keywords: list[str] = Field(default_factory=list)
     city: str = ""
     max_jobs: int = Field(default=10, ge=1, le=30)
-    filters: dict = Field(default_factory=dict)  # salary, experience, education, job_type
+    filters: dict = Field(default_factory=dict)
 
 
 class BossCaptureResult(BaseModel):
@@ -43,10 +46,58 @@ class BossCaptureResult(BaseModel):
     profile_generated: bool = False
     job_profile_id: int = 0
     job_profile: dict = Field(default_factory=dict)
+    search_keywords: list[str] = Field(default_factory=list)
+    applied_filters: dict = Field(default_factory=dict)
 
 
 def _text_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _normalize_search_keywords(primary: str, extras: list[str]) -> list[str]:
+    keywords = []
+    for raw in [primary, *(extras or [])]:
+        for item in re.split(r"[,，、;；\n]+", str(raw or "")):
+            keyword = normalize_job_name(item.strip())
+            if keyword and keyword.lower() not in {value.lower() for value in keywords}:
+                keywords.append(keyword)
+    return keywords
+
+
+def _activity_days(activity_text: str) -> int | None:
+    text = str(activity_text or "").strip()
+    if not text:
+        return None
+    if any(key in text for key in ("在线", "刚刚", "当前活跃")):
+        return 0
+    if "今日" in text or "今天" in text:
+        return 0
+    if "昨日" in text or "昨天" in text:
+        return 1
+    match = re.search(r"(\d+)\s*(?:天|日)内", text)
+    if match:
+        return int(match.group(1))
+    if "本周" in text or "一周内" in text or "近一周" in text:
+        return 7
+    if "本月" in text or "一个月内" in text or "近一月" in text:
+        return 30
+    return None
+
+
+def _matches_capture_filters(job: dict, filters: dict) -> bool:
+    company_size = str((filters or {}).get("company_size", "")).strip()
+    if company_size and str(job.get("company_size") or "").strip() != company_size:
+        return False
+
+    activity_filter = str((filters or {}).get("hr_activity", "")).strip()
+    if activity_filter:
+        days = _activity_days(job.get("hr_active", ""))
+        if days is None:
+            return False
+        max_days = {"recent": 0, "today": 0, "3d": 3, "7d": 7, "30d": 30}.get(activity_filter)
+        if max_days is not None and days > max_days:
+            return False
+    return True
 
 
 def capture_boss_jds(req: BossCaptureRequest) -> BossCaptureResult:
@@ -63,12 +114,19 @@ def capture_boss_jds(req: BossCaptureRequest) -> BossCaptureResult:
 
     job_name = normalize_job_name(req.job_name)
     result = BossCaptureResult()
+    search_keywords = _normalize_search_keywords(job_name, req.extra_job_keywords)
+    result.search_keywords = search_keywords
+    result.applied_filters = {
+        key: value for key, value in (req.filters or {}).items() if value
+    }
 
-    if not job_name:
+    if not search_keywords:
         result.blocked_reason = "岗位关键词不能为空"
         return result
 
-    logger.info(f"Boss 采集开始: job_name={job_name}, city={req.city}")
+    logger.info(
+        f"Boss 采集开始: job_name={job_name}, keywords={search_keywords}, city={req.city}"
+    )
 
     # 检查浏览器状态
     browser = get_browser_capture()
@@ -85,18 +143,39 @@ def capture_boss_jds(req: BossCaptureRequest) -> BossCaptureResult:
         return result
 
     try:
-        # 使用浏览器采集
-        jobs = browser.search_and_capture(
-            job_name=job_name,
-            city=req.city,
-            max_jobs=req.max_jobs,
-            filters=req.filters,
-        )
+        # 每个关键词都分配样本额度，再合并去重为同一岗位画像的数据源。
+        per_keyword = max(1, math.ceil(req.max_jobs / len(search_keywords)))
+        jobs = []
+        seen_jobs = set()
+        for keyword in search_keywords:
+            keyword_jobs = browser.search_and_capture(
+                job_name=keyword,
+                city=req.city,
+                max_jobs=per_keyword,
+                filters=req.filters,
+            )
+            for job in keyword_jobs:
+                identity = (
+                    job.get("encryptJobId")
+                    or job.get("source_url")
+                    or f"{job.get('company', '')}|{job.get('title', '')}"
+                )
+                if not identity or identity in seen_jobs:
+                    continue
+                seen_jobs.add(identity)
+                job["search_keyword"] = keyword
+                jobs.append(job)
+
+        jobs = [job for job in jobs if _matches_capture_filters(job, req.filters)]
+        jobs = jobs[:req.max_jobs]
 
         result.captured_count = len(jobs)
 
         if not jobs:
-            result.warnings.append("未采集到岗位，可能搜索无结果或页面结构变化")
+            if result.applied_filters:
+                result.warnings.append("当前组合筛选未匹配到岗位，可放宽公司规模或 HR 活跃度后重试")
+            else:
+                result.warnings.append("未采集到岗位，可能搜索无结果或页面结构变化")
             result.warnings.append("请尝试手动粘贴 JD 文本")
             return result
 
@@ -123,16 +202,22 @@ def capture_boss_jds(req: BossCaptureRequest) -> BossCaptureResult:
                 jd_items.append({
                     "title": job.get("title", ""),
                     "company": job.get("company", ""),
+                    "company_size": job.get("company_size", ""),
+                    "hr_active": job.get("hr_active", ""),
                     "url": job.get("source_url", ""),
                     "content": raw_text,
+                    "search_keyword": job.get("search_keyword", job_name),
                     "quality_flags": ["detail_missing"],
                 })
             else:
                 jd_items.append({
                     "title": job.get("title", ""),
                     "company": job.get("company", ""),
+                    "company_size": job.get("company_size", ""),
+                    "hr_active": job.get("hr_active", ""),
                     "url": job.get("source_url", ""),
                     "content": raw_text,
+                    "search_keyword": job.get("search_keyword", job_name),
                 })
 
         result.failed_examples = failed_examples
@@ -146,7 +231,13 @@ def capture_boss_jds(req: BossCaptureRequest) -> BossCaptureResult:
             imported = _store_jds(job_name, req.city, valid_jds)
             result.imported_count = imported
             result.documents = [
-                {"title": jd.get("title", ""), "company": jd.get("company", "")}
+                {
+                    "title": jd.get("title", ""),
+                    "company": jd.get("company", ""),
+                    "company_size": jd.get("company_size", ""),
+                    "hr_active": jd.get("hr_active", ""),
+                    "search_keyword": jd.get("search_keyword", job_name),
+                }
                 for jd in valid_jds
             ]
 
@@ -284,7 +375,8 @@ def _store_jds(job_name: str, city: str, jd_items: list[dict]) -> int:
                 logger.debug(f"JD 去重跳过: {item.get('title', '')[:40]}")
                 continue
 
-            search_query = f"{job_name} {city}".strip() if city else job_name
+            source_keyword = item.get("search_keyword") or job_name
+            search_query = f"{source_keyword} {city}".strip() if city else source_keyword
             doc = JdDocument(
                 job_name=job_name,
                 source_url=item.get("url", ""),

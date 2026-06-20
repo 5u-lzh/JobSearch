@@ -1,0 +1,977 @@
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>JobLab — 用AI找到真正适合你的工作</title>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --bg-elevated: #111620;
+    --surface: #181d28;
+    --surface-hover: #1e2432;
+    --fg: #e8ecf2;
+    --fg-secondary: #94a0b8;
+    --muted: #5a6780;
+    --border: #1e2636;
+    --accent: #3dd6c8;
+    --accent-dim: #2a9d94;
+    --accent-glow: rgba(61, 214, 200, 0.12);
+    --success: #4ade80;
+    --warning: #f59e0b;
+    --danger: #f87171;
+    --radius: 10px;
+    --radius-lg: 16px;
+    --font-display: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --font-body: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
+  body {
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* ── Scroll-reveal ── */
+  .reveal {
+    opacity: 0;
+    transform: translateY(32px);
+    transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+  .reveal--left { transform: translateX(-24px); }
+  .reveal--left.visible { transform: translateX(0); }
+  .reveal--right { transform: translateX(24px); }
+  .reveal--right.visible { transform: translateX(0); }
+  .reveal--scale { transform: scale(0.94); }
+  .reveal--scale.visible { transform: scale(1); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { opacity: 1; transform: none; transition: none; }
+    * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+
+  /* ── Layout ── */
+  .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+  section { padding: 100px 0; position: relative; }
+
+  /* ── Nav ── */
+  .nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: rgba(11, 14, 20, 0.88);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    transition: background 0.3s;
+  }
+  .nav__inner {
+    max-width: 1200px; margin: 0 auto; padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between; height: 64px;
+  }
+  .nav__logo {
+    font-family: var(--font-display); font-weight: 700; font-size: 20px;
+    color: var(--fg); letter-spacing: -0.02em; text-decoration: none;
+  }
+  .nav__logo span { color: var(--accent); }
+  .nav__links { display: flex; gap: 28px; align-items: center; }
+  .nav__links a {
+    color: var(--fg-secondary); font-size: 14px; font-weight: 500; text-decoration: none;
+    transition: color 0.2s;
+  }
+  .nav__links a:hover { color: var(--fg); }
+  .nav__hamburger {
+    display: none; width: 36px; height: 36px; background: none; border: none;
+    cursor: pointer; flex-direction: column; gap: 6px; justify-content: center; align-items: center;
+  }
+  .nav__hamburger span {
+    display: block; width: 20px; height: 2px; background: var(--fg); border-radius: 1px;
+    transition: transform 0.2s, opacity 0.2s;
+  }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 12px 26px; border-radius: 10px; font-size: 14px; font-weight: 600;
+    cursor: pointer; border: none; transition: all 0.2s; font-family: var(--font-body);
+    text-decoration: none; white-space: nowrap;
+  }
+  .btn--primary {
+    background: var(--accent); color: #081014;
+  }
+  .btn--primary:hover { filter: brightness(1.12); transform: translateY(-1px); }
+  .btn--ghost {
+    background: transparent; color: var(--fg);
+    border: 1px solid var(--border);
+  }
+  .btn--ghost:hover { border-color: var(--fg-secondary); }
+  .btn--lg { padding: 16px 36px; font-size: 16px; border-radius: 12px; }
+
+  /* ── Hero ── */
+  .hero {
+    min-height: 100vh; display: flex; align-items: center;
+    padding-top: 64px; position: relative; overflow: hidden;
+  }
+  .hero__canvas-wrap {
+    position: absolute; inset: 0; z-index: 0;
+    pointer-events: none;
+  }
+  .hero__canvas-wrap canvas { width: 100%; height: 100%; display: block; }
+  .hero__overlay {
+    position: absolute; inset: 0; z-index: 1;
+    background: radial-gradient(ellipse 50% 40% at 50% 35%, transparent 0%, var(--bg) 70%);
+  }
+  .hero__content { position: relative; z-index: 2; text-align: center; max-width: 780px; margin: 0 auto; }
+  .hero__badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 16px; border-radius: 999px;
+    background: var(--accent-glow); border: 1px solid rgba(61, 214, 200, 0.18);
+    font-size: 13px; font-weight: 500; color: var(--accent); margin-bottom: 28px;
+  }
+  .hero__badge::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulse-dot 2s infinite; }
+  @keyframes pulse-dot {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(61, 214, 200, 0.5); }
+    50% { box-shadow: 0 0 0 10px rgba(61, 214, 200, 0); }
+  }
+  .hero h1 {
+    font-family: var(--font-display); font-size: clamp(38px, 5.8vw, 68px);
+    font-weight: 700; line-height: 1.1; letter-spacing: -0.03em; margin-bottom: 24px;
+  }
+  .hero h1 .highlight {
+    background: linear-gradient(135deg, var(--accent) 0%, #6ee7d8 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .hero__sub {
+    font-size: clamp(16px, 2vw, 18px); color: var(--fg-secondary);
+    max-width: 540px; margin: 0 auto 40px; line-height: 1.7;
+  }
+  .hero__actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .hero__stats {
+    display: flex; gap: 56px; justify-content: center; margin-top: 72px;
+    padding-top: 48px; border-top: 1px solid var(--border);
+  }
+  .hero__stat { text-align: center; }
+  .hero__stat-value {
+    font-family: var(--font-display); font-size: 38px; font-weight: 700;
+    color: var(--accent); letter-spacing: -0.02em; line-height: 1;
+  }
+  .hero__stat-label { font-size: 13px; color: var(--muted); margin-top: 6px; }
+
+  /* ── Pain Points ── */
+  .painpoints { background: var(--bg-elevated); }
+  .section-label {
+    font-family: var(--font-mono); font-size: 12px; font-weight: 500;
+    color: var(--accent); letter-spacing: 0.14em; text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  .section-title {
+    font-family: var(--font-display); font-size: clamp(28px, 3.5vw, 40px);
+    font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; margin-bottom: 14px;
+  }
+  .section-desc { font-size: 16px; color: var(--fg-secondary); max-width: 540px; }
+  .section-header--center { text-align: center; margin-bottom: 64px; }
+  .section-header--center .section-desc { margin: 0 auto; }
+  .pain-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 20px;
+  }
+  .pain-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 32px;
+    transition: border-color 0.25s, transform 0.25s, box-shadow 0.25s;
+  }
+  .pain-card:hover {
+    border-color: var(--accent-dim);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+  }
+  .pain-card__icon {
+    width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center;
+    font-size: 18px; margin-bottom: 18px;
+  }
+  .pain-card__icon--red { background: rgba(248, 113, 113, 0.1); color: var(--danger); }
+  .pain-card__icon--yellow { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
+  .pain-card__icon--blue { background: rgba(61, 214, 200, 0.1); color: var(--accent); }
+  .pain-card h3 {
+    font-family: var(--font-display); font-size: 18px; font-weight: 600;
+    margin-bottom: 8px; letter-spacing: -0.01em;
+  }
+  .pain-card p { font-size: 14px; color: var(--fg-secondary); line-height: 1.7; }
+
+  /* ── How it works ── */
+  .how__steps {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 48px;
+    position: relative;
+  }
+  .how__steps::before {
+    content: ''; position: absolute; top: 40px; left: 12%; right: 12%;
+    height: 1px; background: linear-gradient(90deg, transparent, var(--border), transparent);
+  }
+  .how-step { text-align: center; position: relative; }
+  .how-step__number {
+    width: 52px; height: 52px; border-radius: 50%;
+    background: var(--accent-glow); border: 2px solid var(--accent-dim);
+    display: grid; place-items: center;
+    font-family: var(--font-display); font-size: 20px; font-weight: 700;
+    color: var(--accent); margin: 0 auto 20px; position: relative; z-index: 1;
+  }
+  .how-step h3 {
+    font-family: var(--font-display); font-size: 18px; font-weight: 600;
+    margin-bottom: 8px; letter-spacing: -0.01em;
+  }
+  .how-step p { font-size: 14px; color: var(--fg-secondary); max-width: 260px; margin: 0 auto; }
+  .how-step__sub {
+    margin-top: 14px; padding: 10px 16px; border-radius: var(--radius);
+    background: var(--surface); border: 1px solid var(--border);
+    font-family: var(--font-mono); font-size: 11px; color: var(--muted); display: inline-block;
+  }
+
+  /* ── Product UI mock ── */
+  .product-preview {
+    margin-top: 72px; max-width: 960px; margin-left: auto; margin-right: auto;
+  }
+  .product-frame {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  }
+  .product-frame__toolbar {
+    padding: 12px 16px; background: #141a26; border-bottom: 1px solid var(--border);
+    display: flex; gap: 8px;
+  }
+  .product-frame__dot { width: 10px; height: 10px; border-radius: 50%; }
+  .product-frame__dot--red { background: #ff5f57; }
+  .product-frame__dot--yellow { background: #febc2e; }
+  .product-frame__dot--green { background: #28c840; }
+  .product-frame__body { padding: 28px 32px; display: flex; gap: 32px; }
+  .product-frame__sidebar {
+    width: 200px; flex-shrink: 0; display: flex; flex-direction: column; gap: 6px;
+  }
+  .product-frame__sidebar-item {
+    padding: 10px 14px; border-radius: 8px; font-size: 13px; color: var(--fg-secondary);
+    cursor: default; transition: all 0.2s;
+  }
+  .product-frame__sidebar-item.active { background: rgba(61, 214, 200, 0.08); color: var(--accent); font-weight: 600; }
+  .product-frame__main { flex: 1; display: flex; flex-direction: column; gap: 20px; }
+  .product-frame__card {
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 20px;
+  }
+  .product-frame__card-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+  .product-frame__meter {
+    display: flex; align-items: center; gap: 14px; padding: 8px 0;
+  }
+  .product-frame__meter-label { font-size: 13px; color: var(--fg-secondary); width: 80px; text-align: right; flex-shrink: 0; }
+  .product-frame__meter-track { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .product-frame__meter-fill { height: 100%; border-radius: 3px; }
+  .product-frame__meter-val { font-family: var(--font-mono); font-size: 13px; font-weight: 600; width: 36px; }
+  .product-frame__footer {
+    padding: 16px 32px; border-top: 1px solid var(--border);
+    display: flex; justify-content: flex-end; gap: 12px;
+  }
+
+  /* ── Features ── */
+  .features { background: var(--bg-elevated); }
+  .feature-grid { display: flex; flex-direction: column; gap: 20px; }
+  .feature-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .feature-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 34px;
+    transition: border-color 0.25s, transform 0.25s;
+  }
+  .feature-card:hover { border-color: var(--accent-dim); }
+  .feature-card__tag {
+    font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+    color: var(--accent); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 14px;
+  }
+  .feature-card h3 {
+    font-family: var(--font-display); font-size: 20px; font-weight: 600;
+    margin-bottom: 10px; letter-spacing: -0.01em;
+  }
+  .feature-card > p { font-size: 14px; color: var(--fg-secondary); line-height: 1.7; margin-bottom: 18px; }
+  .feature-card__visual {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 22px;
+  }
+  .score-bars { display: flex; flex-direction: column; gap: 12px; }
+  .score-bar { display: flex; align-items: center; gap: 12px; }
+  .score-bar__label { font-size: 12px; color: var(--fg-secondary); min-width: 72px; text-align: right; }
+  .score-bar__track { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .score-bar__fill { height: 100%; border-radius: 3px; }
+  .score-bar__value { font-family: var(--font-mono); font-size: 12px; font-weight: 600; min-width: 32px; }
+  .compare-mini { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .compare-mini__item {
+    padding: 14px 16px; border-radius: var(--radius); border: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .compare-mini__item h4 { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .compare-mini__item p { font-size: 12px; color: var(--muted); }
+
+  /* ── Report Preview ── */
+  .report-mockup {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); overflow: hidden; max-width: 920px; margin: 0 auto;
+  }
+  .report-mockup__header {
+    padding: 22px 28px; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .report-mockup__title { font-family: var(--font-display); font-size: 16px; font-weight: 600; }
+  .report-mockup__score {
+    font-family: var(--font-mono); font-size: 26px; font-weight: 700; color: var(--success);
+  }
+  .report-mockup__body { padding: 28px; }
+  .report-dimensions { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+  .report-dim {
+    text-align: center; padding: 20px 10px; background: var(--bg);
+    border-radius: var(--radius); border: 1px solid var(--border);
+  }
+  .report-dim__ring {
+    width: 68px; height: 68px; margin: 0 auto 10px;
+    border-radius: 50%; display: grid; place-items: center;
+    font-family: var(--font-display); font-size: 18px; font-weight: 700;
+  }
+  .report-dim__label { font-size: 12px; color: var(--fg-secondary); font-weight: 500; }
+  .report-mockup__footer {
+    padding: 18px 28px; border-top: 1px solid var(--border);
+    display: flex; gap: 12px; justify-content: flex-end;
+  }
+
+  /* ── Comparison ── */
+  .comp-table-wrap { overflow-x: auto; border-radius: var(--radius-lg); border: 1px solid var(--border); }
+  .comp-table { width: 100%; border-collapse: collapse; background: var(--surface); }
+  .comp-table th, .comp-table td { padding: 16px 22px; text-align: left; font-size: 14px; border-bottom: 1px solid var(--border); }
+  .comp-table thead th { background: var(--bg-elevated); font-weight: 600; font-family: var(--font-display); font-size: 13px; }
+  .comp-table thead th:first-child { width: 180px; }
+  .comp-table thead th.hl { color: var(--accent); }
+  .comp-table tbody td:first-child { font-weight: 500; color: var(--fg-secondary); }
+  .comp-table tbody tr:last-child td { border-bottom: none; }
+  .comp-table .check { color: var(--success); font-weight: 600; }
+  .comp-table .cross { color: var(--danger); opacity: 0.5; }
+  .comp-table .partial { color: var(--warning); }
+
+  /* ── Trust ── */
+  .trust { background: var(--bg-elevated); }
+  .trust-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 20px; margin-top: 52px; }
+  .trust-card {
+    text-align: center; padding: 30px 22px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  }
+  .trust-card__icon {
+    width: 48px; height: 48px; margin: 0 auto 18px; border-radius: 12px;
+    display: grid; place-items: center; font-size: 20px; background: var(--accent-glow);
+  }
+  .trust-card h3 { font-family: var(--font-display); font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+  .trust-card p { font-size: 13px; color: var(--fg-secondary); line-height: 1.6; }
+
+  /* ── FAQ ── */
+  .faq-list { max-width: 720px; margin: 0 auto; }
+  .faq-item { border-bottom: 1px solid var(--border); padding: 26px 0; }
+  .faq-item:first-child { border-top: 1px solid var(--border); }
+  .faq-item summary {
+    font-family: var(--font-display); font-size: 16px; font-weight: 600;
+    cursor: pointer; list-style: none; display: flex;
+    justify-content: space-between; align-items: center; transition: color 0.2s;
+  }
+  .faq-item summary::-webkit-details-marker { display: none; }
+  .faq-item summary::after { content: '+'; font-size: 20px; font-weight: 300; color: var(--muted); transition: transform 0.25s; }
+  .faq-item[open] summary::after { content: '−'; }
+  .faq-item summary:hover { color: var(--accent); }
+  .faq-item p { margin-top: 14px; font-size: 14px; color: var(--fg-secondary); line-height: 1.7; max-width: 600px; }
+
+  /* ── CTA ── */
+  .cta { text-align: center; position: relative; overflow: hidden; }
+  .cta::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse 55% 45% at 50% 50%, rgba(61, 214, 200, 0.08), transparent);
+  }
+  .cta__content { position: relative; z-index: 1; }
+  .cta h2 { font-family: var(--font-display); font-size: clamp(28px, 4vw, 44px); font-weight: 700; letter-spacing: -0.02em; margin-bottom: 14px; }
+  .cta p { font-size: 17px; color: var(--fg-secondary); margin-bottom: 32px; }
+  .cta__invite {
+    display: flex; gap: 12px; max-width: 420px; margin: 0 auto;
+  }
+  .cta__invite input {
+    flex: 1; padding: 14px 18px; border-radius: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--fg); font-size: 15px; font-family: var(--font-body);
+    outline: none; transition: border-color 0.2s;
+  }
+  .cta__invite input:focus { border-color: var(--accent); }
+  .cta__invite input::placeholder { color: var(--muted); font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.05em; }
+
+  /* ── Footer ── */
+  .footer { padding: 44px 0; border-top: 1px solid var(--border); text-align: center; }
+  .footer__links { display: flex; gap: 28px; justify-content: center; margin-bottom: 16px; flex-wrap: wrap; }
+  .footer__links a { color: var(--muted); font-size: 13px; text-decoration: none; transition: color 0.2s; }
+  .footer__links a:hover { color: var(--fg); }
+  .footer__copy { font-size: 12px; color: var(--muted); }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    section { padding: 64px 0; }
+    .nav__links { display: none; }
+    .nav__hamburger { display: flex; }
+    .hero__stats { flex-direction: column; gap: 28px; }
+    .how__steps { grid-template-columns: 1fr; gap: 36px; }
+    .how__steps::before { display: none; }
+    .feature-row { grid-template-columns: 1fr; }
+    .product-frame__body { flex-direction: column; padding: 20px; }
+    .product-frame__sidebar { width: 100%; flex-direction: row; overflow-x: auto; gap: 4px; }
+    .product-frame__sidebar-item { white-space: nowrap; }
+    .report-dimensions { grid-template-columns: repeat(2, 1fr); }
+    .report-dim:nth-child(5) { grid-column: 1 / -1; justify-self: center; width: 50%; }
+    .comp-table th, .comp-table td { padding: 12px 14px; font-size: 13px; }
+    .cta__invite { flex-direction: column; }
+    .compare-mini { grid-template-columns: 1fr; }
+    .hero h1 { font-size: clamp(30px, 8vw, 44px); }
+  }
+  @media (max-width: 480px) {
+    .pain-grid { grid-template-columns: 1fr; }
+    .trust-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav class="nav">
+  <div class="nav__inner">
+    <a href="#" class="nav__logo">Job<span>Lab</span></a>
+    <div class="nav__links">
+      <a href="#how">工作原理</a>
+      <a href="#features">核心功能</a>
+      <a href="#comparison">对比</a>
+      <a href="#faq">常见问题</a>
+      <a href="/app" class="btn btn--primary" style="padding:9px 20px;font-size:13px;">开始分析</a>
+    </div>
+    <button class="nav__hamburger" aria-label="菜单" id="hamburger">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero__canvas-wrap"><canvas id="hero-canvas"></canvas></div>
+  <div class="hero__overlay"></div>
+  <div class="container hero__content reveal">
+    <div class="hero__badge">基于真实数据的AI求职分析</div>
+    <h1>用<span class="highlight">AI</span>找到<br>真正适合你的工作</h1>
+    <p class="hero__sub">
+      上传简历与目标岗位，即可获取你的专属求职适配报告。<br>
+      基于真实 JD 和你的简历，五维数据量化匹配程度。
+    </p>
+    <div class="hero__actions">
+      <a href="/app" class="btn btn--primary btn--lg">开始分析</a>
+      <a href="#how" class="btn btn--ghost btn--lg">了解工作原理</a>
+    </div>
+    <div class="hero__stats reveal">
+      <div class="hero__stat">
+        <div class="hero__stat-value"><span class="count-up" data-target="5">0</span> 维</div>
+        <div class="hero__stat-label">深度适配分析</div>
+      </div>
+      <div class="hero__stat">
+        <div class="hero__stat-value"><span class="count-up" data-target="2">0</span> 份</div>
+        <div class="hero__stat-label">岗位与候选人画像</div>
+      </div>
+      <div class="hero__stat">
+        <div class="hero__stat-value"><span class="count-up" data-target="3">0</span> 类</div>
+        <div class="hero__stat-label">证据、差距与行动建议</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Pain Points -->
+<section class="painpoints" id="painpoints">
+  <div class="container">
+    <div class="section-header--center reveal">
+      <div class="section-label">为什么需要 JobLab</div>
+      <h2 class="section-title">海投时代该结束了</h2>
+      <p class="section-desc">传统求职方式正在浪费你的时间和机会</p>
+    </div>
+    <div class="pain-grid">
+      <div class="pain-card reveal reveal--left">
+        <div class="pain-card__icon pain-card__icon--red">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><path d="M22 12H2"/><path d="M7 16h.01"/><path d="M13 16h2"/></svg>
+        </div>
+        <h3>投了 200 份简历，已读不回</h3>
+        <p>简历和岗位不匹配，HR 秒关。你甚至不知道问题出在哪里——是技能差距、经验年限、还是简历表述？</p>
+      </div>
+      <div class="pain-card reveal" style="transition-delay:0.1s;">
+        <div class="pain-card__icon pain-card__icon--yellow">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <h3>JD 写得太模糊，全靠猜</h3>
+        <p>"有相关经验优先""熟悉常见框架"——到底什么才算匹配？你只能凭感觉投递，成功率听天由命。</p>
+      </div>
+      <div class="pain-card reveal reveal--right" style="transition-delay:0.2s;">
+        <div class="pain-card__icon pain-card__icon--blue">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </div>
+        <h3>简历改了 10 版，不知道改什么</h3>
+        <p>网上的简历建议千篇一律。你需要的不是通用模板，而是针对<strong>这个岗位</strong>的具体优化方向。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- How it works + Product preview -->
+<section class="how" id="how">
+  <div class="container">
+    <div class="section-header--center reveal">
+      <div class="section-label">三步完成</div>
+      <h2 class="section-title">从模糊猜测到精准匹配</h2>
+      <p class="section-desc">上传简历、粘贴 JD，生成有证据支撑的适配分析报告</p>
+    </div>
+    <div class="how__steps">
+      <div class="how-step reveal reveal--left">
+        <div class="how-step__number">1</div>
+        <h3>岗位画像建立</h3>
+        <p>把目标岗位的 JD 原文粘贴进来，我们自动拆解技能、经验、学历等关键要求。</p>
+        <div class="how-step__sub">支持任意格式 JD</div>
+      </div>
+      <div class="how-step reveal reveal--scale">
+        <div class="how-step__number">2</div>
+        <h3>上传你的简历</h3>
+        <p>上传 PDF 或 Word 格式的简历，系统提取你的技能、项目经历和教育背景。</p>
+        <div class="how-step__sub">支持 PDF、Word 与纯文本</div>
+      </div>
+      <div class="how-step reveal reveal--right">
+        <div class="how-step__number">3</div>
+        <h3>获取适配报告</h3>
+        <p>五维雷达图 + 逐项匹配分析 + 差距清单 + 优化建议，一次看清你和岗位的距离。</p>
+        <div class="how-step__sub">分析时间取决于模型与材料长度</div>
+      </div>
+    </div>
+
+    <!-- Product UI mock -->
+    <div class="product-preview reveal reveal--scale">
+      <div class="product-frame">
+        <div class="product-frame__toolbar">
+          <div class="product-frame__dot product-frame__dot--red"></div>
+          <div class="product-frame__dot product-frame__dot--yellow"></div>
+          <div class="product-frame__dot product-frame__dot--green"></div>
+        </div>
+        <div class="product-frame__body">
+          <div class="product-frame__sidebar">
+            <div class="product-frame__sidebar-item active">岗位画像</div>
+            <div class="product-frame__sidebar-item">简历解析</div>
+            <div class="product-frame__sidebar-item">适配报告</div>
+            <div class="product-frame__sidebar-item">优化建议</div>
+          </div>
+          <div class="product-frame__main">
+            <div class="product-frame__card">
+              <div class="product-frame__card-title">数据分析师 · 字节跳动</div>
+              <div class="product-frame__meter">
+                <span class="product-frame__meter-label">能力匹配</span>
+                <div class="product-frame__meter-track"><div class="product-frame__meter-fill" style="width:88%;background:var(--success)"></div></div>
+                <span class="product-frame__meter-val" style="color:var(--success)">88</span>
+              </div>
+              <div class="product-frame__meter">
+                <span class="product-frame__meter-label">经历相关</span>
+                <div class="product-frame__meter-track"><div class="product-frame__meter-fill" style="width:82%;background:var(--success)"></div></div>
+                <span class="product-frame__meter-val" style="color:var(--success)">82</span>
+              </div>
+              <div class="product-frame__meter">
+                <span class="product-frame__meter-label">成长潜力</span>
+                <div class="product-frame__meter-track"><div class="product-frame__meter-fill" style="width:70%;background:var(--warning)"></div></div>
+                <span class="product-frame__meter-val" style="color:var(--warning)">70</span>
+              </div>
+              <div class="product-frame__meter">
+                <span class="product-frame__meter-label">证据充分</span>
+                <div class="product-frame__meter-track"><div class="product-frame__meter-fill" style="width:75%;background:var(--success)"></div></div>
+                <span class="product-frame__meter-val" style="color:var(--success)">75</span>
+              </div>
+              <div class="product-frame__meter">
+                <span class="product-frame__meter-label">风险短板</span>
+                <div class="product-frame__meter-track"><div class="product-frame__meter-fill" style="width:55%;background:var(--danger)"></div></div>
+                <span class="product-frame__meter-val" style="color:var(--danger)">55</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="product-frame__footer">
+          <span class="btn btn--ghost" style="font-size:12px;padding:8px 16px;">导出报告</span>
+          <span class="btn btn--primary" style="font-size:12px;padding:8px 16px;">查看优化建议 →</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="features" id="features">
+  <div class="container">
+    <div class="section-header--center reveal">
+      <div class="section-label">核心功能</div>
+      <h2 class="section-title">不只是打分，而是帮你理解差距</h2>
+      <p class="section-desc">JobLab 的五维分析让你知道该补什么、怎么补</p>
+    </div>
+    <div class="feature-grid">
+      <div class="feature-row">
+        <div class="feature-card reveal reveal--left">
+          <div class="feature-card__tag">五维雷达图</div>
+          <h3>一图看清全局匹配度</h3>
+          <p>能力匹配、经历相关、成长潜力、证据充分、风险短板——五个维度量化呈现，直观了解自己的强项和短板。</p>
+          <div class="feature-card__visual">
+            <svg viewBox="0 0 280 280" style="width:100%;max-width:320px;margin:0 auto;display:block;" xmlns="http://www.w3.org/2000/svg">
+              <polygon points="140,35 258,108 218,242 62,242 22,108" stroke="var(--border)" stroke-width="1" fill="none"/>
+              <polygon points="140,62 236,120 204,226 76,226 44,120" stroke="var(--border)" stroke-width="1" fill="none"/>
+              <polygon points="140,89 214,132 190,210 90,210 66,132" stroke="var(--border)" stroke-width="1" fill="none"/>
+              <polygon points="140,116 192,144 176,194 104,194 88,144" stroke="var(--border)" stroke-width="1" fill="none"/>
+              <line x1="140" y1="35" x2="140" y2="140" stroke="var(--border)" stroke-width="0.5"/>
+              <line x1="258" y1="108" x2="140" y2="140" stroke="var(--border)" stroke-width="0.5"/>
+              <line x1="218" y1="242" x2="140" y2="140" stroke="var(--border)" stroke-width="0.5"/>
+              <line x1="62" y1="242" x2="140" y2="140" stroke="var(--border)" stroke-width="0.5"/>
+              <line x1="22" y1="108" x2="140" y2="140" stroke="var(--border)" stroke-width="0.5"/>
+              <polygon points="140,52 249,115 212,234 76,220 42,113" fill="rgba(61,214,200,0.1)" stroke="var(--accent)" stroke-width="1.8"/>
+              <circle cx="140" cy="52" r="3.5" fill="var(--accent)"/>
+              <circle cx="249" cy="115" r="3.5" fill="var(--accent)"/>
+              <circle cx="212" cy="234" r="3.5" fill="var(--accent)"/>
+              <circle cx="76" cy="220" r="3.5" fill="var(--accent)"/>
+              <circle cx="42" cy="113" r="3.5" fill="var(--accent)"/>
+            </svg>
+          </div>
+        </div>
+        <div class="feature-card reveal reveal--right">
+          <div class="feature-card__tag">差距分析</div>
+          <h3>精确到具体技能的差距清单</h3>
+          <p>不是笼统的"不太匹配"，而是逐项列出你缺少哪些技能、需要补到什么程度、优先级如何排序。</p>
+          <div class="feature-card__visual">
+            <div class="score-bars">
+              <div class="score-bar"><span class="score-bar__label">Python</span><div class="score-bar__track"><div class="score-bar__fill" style="width:92%;background:var(--success)"></div></div><span class="score-bar__value" style="color:var(--success)">92</span></div>
+              <div class="score-bar"><span class="score-bar__label">SQL</span><div class="score-bar__track"><div class="score-bar__fill" style="width:85%;background:var(--success)"></div></div><span class="score-bar__value" style="color:var(--success)">85</span></div>
+              <div class="score-bar"><span class="score-bar__label">机器学习</span><div class="score-bar__track"><div class="score-bar__fill" style="width:68%;background:var(--warning)"></div></div><span class="score-bar__value" style="color:var(--warning)">68</span></div>
+              <div class="score-bar"><span class="score-bar__label">TensorFlow</span><div class="score-bar__track"><div class="score-bar__fill" style="width:35%;background:var(--danger)"></div></div><span class="score-bar__value" style="color:var(--danger)">35</span></div>
+              <div class="score-bar"><span class="score-bar__label">大模型部署</span><div class="score-bar__track"><div class="score-bar__fill" style="width:20%;background:var(--danger)"></div></div><span class="score-bar__value" style="color:var(--danger)">20</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="feature-row">
+        <div class="feature-card reveal reveal--left">
+          <div class="feature-card__tag">简历优化</div>
+          <h3>针对这个岗位的优化建议</h3>
+          <p>基于 JD 关键词和你的简历内容，给出具体的表述调整建议。不是泛泛的"量化成果"，而是"把项目 A 中的 XX 数据提到前面"。</p>
+          <div class="feature-card__visual">
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <div style="padding:13px 16px;background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:var(--radius);font-size:13px;color:var(--fg-secondary);">
+                <span style="color:var(--danger);font-weight:600;">原文：</span>"参与了推荐系统的开发和优化"
+              </div>
+              <div style="padding:13px 16px;background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.2);border-radius:var(--radius);font-size:13px;color:var(--fg-secondary);">
+                <span style="color:var(--success);font-weight:600;">优化：</span>"主导推荐系统 v2 重构，CTR 提升 23%，日均处理 500 万请求"
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="feature-card reveal reveal--right">
+          <div class="feature-card__tag">岗位画像</div>
+          <h3>看穿 JD 背后的真实需求</h3>
+          <p>不只是逐字匹配，而是基于行业知识推断岗位的核心能力模型。"熟悉分布式系统"可能意味着需要 Kafka + K8s 实战经验。</p>
+          <div class="feature-card__visual">
+            <div class="compare-mini">
+              <div class="compare-mini__item"><h4 style="color:var(--fg-secondary);">JD 表面写</h4><p>"熟悉常见机器学习框架"</p></div>
+              <div class="compare-mini__item" style="border-color:var(--accent-dim);"><h4 style="color:var(--accent);">实际需要</h4><p>PyTorch 生产经验、模型调优、分布式训练</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Report Preview -->
+<section class="report-preview" id="report">
+  <div class="container">
+    <div class="section-header--center reveal">
+      <div class="section-label">报告示例</div>
+      <h2 class="section-title">一份报告，看清全局</h2>
+      <p class="section-desc">每份适配报告包含五维评分、逐项差距分析和可执行的优化建议</p>
+    </div>
+    <div class="report-mockup reveal reveal--scale">
+      <div class="report-mockup__header">
+        <div class="report-mockup__title">数据分析师 · 字节跳动 · 适配报告</div>
+        <div class="report-mockup__score">76<span style="font-size:13px;color:var(--muted);font-weight:400;">/100</span></div>
+      </div>
+      <div class="report-mockup__body">
+        <div class="report-dimensions">
+          <div class="report-dim">
+            <div class="report-dim__ring" style="background:conic-gradient(var(--success) 0% 88%, var(--border) 88% 100%);"><span style="background:var(--surface);width:50px;height:50px;border-radius:50%;display:grid;place-items:center;font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--success);">88</span></div>
+            <div class="report-dim__label">能力匹配</div>
+          </div>
+          <div class="report-dim">
+            <div class="report-dim__ring" style="background:conic-gradient(var(--success) 0% 82%, var(--border) 82% 100%);"><span style="background:var(--surface);width:50px;height:50px;border-radius:50%;display:grid;place-items:center;font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--success);">82</span></div>
+            <div class="report-dim__label">经历相关</div>
+          </div>
+          <div class="report-dim">
+            <div class="report-dim__ring" style="background:conic-gradient(var(--warning) 0% 70%, var(--border) 70% 100%);"><span style="background:var(--surface);width:50px;height:50px;border-radius:50%;display:grid;place-items:center;font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--warning);">70</span></div>
+            <div class="report-dim__label">成长潜力</div>
+          </div>
+          <div class="report-dim">
+            <div class="report-dim__ring" style="background:conic-gradient(var(--success) 0% 75%, var(--border) 75% 100%);"><span style="background:var(--surface);width:50px;height:50px;border-radius:50%;display:grid;place-items:center;font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--success);">75</span></div>
+            <div class="report-dim__label">证据充分</div>
+          </div>
+          <div class="report-dim">
+            <div class="report-dim__ring" style="background:conic-gradient(var(--danger) 0% 55%, var(--border) 55% 100%);"><span style="background:var(--surface);width:50px;height:50px;border-radius:50%;display:grid;place-items:center;font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--danger);">55</span></div>
+            <div class="report-dim__label">风险短板</div>
+          </div>
+        </div>
+      </div>
+      <div class="report-mockup__footer">
+        <a href="#report" class="btn btn--ghost" style="font-size:12px;padding:8px 18px;">查看完整示例报告</a>
+        <a href="/app" class="btn btn--primary" style="font-size:12px;padding:8px 18px;">生成我的报告</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Comparison -->
+<section class="comparison" id="comparison">
+  <div class="container">
+    <div class="section-header--center reveal">
+      <div class="section-label">对比</div>
+      <h2 class="section-title">JobLab vs 传统求职方式</h2>
+      <p class="section-desc">从"碰运气"到"有策略"</p>
+    </div>
+    <div class="comp-table-wrap reveal reveal--scale">
+      <table class="comp-table">
+        <thead><tr><th></th><th class="hl">JobLab</th><th>海投简历</th><th>猎头推荐</th><th>求职课程</th></tr></thead>
+        <tbody>
+          <tr><td>岗位匹配分析</td><td class="check">✓ 五维量化</td><td class="cross">✗</td><td class="partial">△ 凭经验</td><td class="cross">✗</td></tr>
+          <tr><td>简历针对性优化</td><td class="check">✓ 逐条建议</td><td class="cross">✗</td><td class="partial">△ 粗略调整</td><td class="partial">△ 通用模板</td></tr>
+          <tr><td>技能差距定位</td><td class="check">✓ 精确到技能项</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td></tr>
+          <tr><td>结果依据</td><td class="check">JD + 简历证据</td><td>—</td><td>人工判断</td><td>通用课程内容</td></tr>
+          <tr><td>输出形式</td><td class="check">结构化报告</td><td>投递记录</td><td>岗位推荐</td><td>学习资料</td></tr>
+          <tr><td>适合场景</td><td class="check">精准投递前</td><td>广撒网</td><td>高端岗位</td><td>求职新手</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- Trust -->
+<section class="trust" id="trust">
+  <div class="container">
+    <div class="section-header--center reveal">
+      <div class="section-label">隐私与安全</div>
+      <h2 class="section-title">你的数据，你做主</h2>
+      <p class="section-desc">我们理解简历是你的核心隐私。JobLab 从设计之初就把数据安全放在第一位。</p>
+    </div>
+    <div class="trust-grid">
+      <div class="trust-card reveal reveal--left"><div class="trust-card__icon">01</div><h3>按需提交材料</h3><p>仅在你主动发起分析时，才会将岗位描述和简历内容提交给服务端处理。</p></div>
+      <div class="trust-card reveal" style="transition-delay:0.1s;"><div class="trust-card__icon">02</div><h3>结果依据可追溯</h3><p>适配结论会同时展示岗位要求、候选人证据和对应差距，便于人工复核。</p></div>
+      <div class="trust-card reveal" style="transition-delay:0.2s;"><div class="trust-card__icon">03</div><h3>报告独立归属</h3><p>当前版本通过用户标识区分分析记录；正式上线前仍需接入完整登录鉴权。</p></div>
+      <div class="trust-card reveal reveal--right" style="transition-delay:0.3s;"><div class="trust-card__icon">04</div><h3>记录可以删除</h3><p>功能服务支持查询历史分析报告，也提供删除指定报告和用户数据的接口。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="faq" id="faq">
+  <div class="container">
+    <div class="section-header--center reveal">
+      <div class="section-label">常见问题</div>
+      <h2 class="section-title">你可能想知道的</h2>
+    </div>
+    <div class="faq-list">
+      <details class="faq-item reveal">
+        <summary>JobLab 是免费的吗？</summary>
+        <p>当前项目处于产品验证阶段，暂未接入正式计费。上线前可根据测试范围和模型成本再确定使用额度与版本策略。</p>
+      </details>
+      <details class="faq-item reveal">
+        <summary>支持哪些格式的简历？</summary>
+        <p>目前支持 PDF、Word (.docx) 和纯文本格式。推荐使用 PDF 格式以获得最准确的解析效果。</p>
+      </details>
+      <details class="faq-item reveal">
+        <summary>适配分数准确吗？</summary>
+        <p>适配分数基于自然语言处理和行业知识图谱生成，能准确反映客观匹配程度。但求职是多因素决策，分数仅供参考，建议将报告作为面试准备和简历优化的工具。</p>
+      </details>
+      <details class="faq-item reveal">
+        <summary>我的简历数据会被保存吗？</summary>
+        <p>简历内容会提交给当前服务端完成解析与画像生成，分析结果及相关画像可能写入数据库。正式上线前应补充登录鉴权、隐私政策和数据保留规则。</p>
+      </details>
+      <details class="faq-item reveal">
+        <summary>除了互联网岗位，其他行业支持吗？</summary>
+        <p>支持。岗位分析引擎覆盖互联网、金融、教育、医疗、制造等主流行业。技术岗位的分析精度最高，其他行业持续扩展中。</p>
+      </details>
+      <details class="faq-item reveal">
+        <summary>可以批量分析多个岗位吗？</summary>
+        <p>当前工作台以单个岗位和单份简历的深度分析为主；仓库中另有岗位技能排行等能力，批量产品流程尚未作为正式功能开放。</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta" id="cta">
+  <div class="container cta__content">
+    <h2 class="reveal">别再海投了<br>先看看你和岗位有多配</h2>
+    <p class="reveal" style="transition-delay:0.1s;">进入 JobLab，开始生成你的求职适配报告</p>
+    <div class="reveal" style="transition-delay:0.2s;">
+      <a href="/app" class="btn btn--primary btn--lg">开始分析</a>
+    </div>
+    <p class="reveal" style="font-size:13px;color:var(--muted);margin-top:16px;transition-delay:0.3s;">基于真实 JD 与个人简历 · 分析结果仅供求职准备参考</p>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer__links">
+      <a href="#">隐私政策</a><a href="#">用户协议</a><a href="#">关于我们</a><a href="#">联系方式</a>
+    </div>
+    <div class="footer__copy">© 2025 JobLab. 用AI找到真正适合你的工作。</div>
+  </div>
+</footer>
+
+<script>
+/* ── Data-flow canvas ── */
+(function(){
+  var c = document.getElementById('hero-canvas');
+  if (!c) return;
+  var ctx = c.getContext('2d');
+  var W, H;
+  var points = [];
+  var POINT_COUNT = 60;
+  var CONNECT_DIST = 160;
+
+  function resize() {
+    W = c.width = c.parentElement.offsetWidth;
+    H = c.height = c.parentElement.offsetHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  for (var i = 0; i < POINT_COUNT; i++) {
+    points.push({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      vx: (Math.random() - 0.5) * 0.4,
+      vy: (Math.random() - 0.5) * 0.4,
+      r: Math.random() * 2.2 + 1
+    });
+  }
+
+  var accentR = 61, accentG = 214, accentB = 200; // #3dd6c8
+
+  function draw(t) {
+    ctx.clearRect(0, 0, W, H);
+    var i, j, p, q, dx, dy, dist, alpha;
+
+    // update & draw points
+    for (i = 0; i < POINT_COUNT; i++) {
+      p = points[i];
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
+      if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(61,214,200,0.35)';
+      ctx.fill();
+    }
+
+    // draw connections
+    for (i = 0; i < POINT_COUNT; i++) {
+      p = points[i];
+      for (j = i + 1; j < POINT_COUNT; j++) {
+        q = points[j];
+        dx = p.x - q.x; dy = p.y - q.y;
+        dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < CONNECT_DIST) {
+          alpha = (1 - dist / CONNECT_DIST) * 0.25;
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(q.x, q.y);
+          ctx.strokeStyle = 'rgba(61,214,200,' + alpha + ')';
+          ctx.lineWidth = 0.6;
+          ctx.stroke();
+        }
+      }
+    }
+
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+})();
+
+/* ── Scroll reveal ── */
+(function(){
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.12 });
+
+  document.querySelectorAll('.reveal').forEach(function(el) {
+    observer.observe(el);
+  });
+})();
+
+/* ── Count-up animation ── */
+(function(){
+  var counted = new Set();
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (!entry.isIntersecting) return;
+      var el = entry.target;
+      if (counted.has(el)) return;
+      counted.add(el);
+      var target = parseInt(el.getAttribute('data-target'), 10);
+      var duration = 1600;
+      var start = performance.now();
+      function tick(now) {
+        var progress = Math.min((now - start) / duration, 1);
+        var eased = 1 - Math.pow(1 - progress, 3);
+        el.textContent = Math.round(target * eased);
+        if (progress < 1) requestAnimationFrame(tick);
+        else el.textContent = target;
+      }
+      requestAnimationFrame(tick);
+    });
+  }, { threshold: 0.6 });
+
+  document.querySelectorAll('.count-up').forEach(function(el) {
+    observer.observe(el);
+  });
+})();
+
+/* ── Nav scroll background ── */
+(function(){
+  var nav = document.querySelector('.nav');
+  window.addEventListener('scroll', function() {
+    if (window.scrollY > 20) nav.style.background = 'rgba(11,14,20,0.95)';
+    else nav.style.background = 'rgba(11,14,20,0.88)';
+  });
+})();
+
+/* ── Hamburger menu (mobile) ── */
+(function(){
+  var btn = document.getElementById('hamburger');
+  var links = document.querySelector('.nav__links');
+  if (!btn || !links) return;
+  btn.addEventListener('click', function() {
+    var open = links.style.display === 'flex';
+    links.style.display = open ? 'none' : 'flex';
+    links.style.flexDirection = 'column';
+    links.style.position = 'absolute';
+    links.style.top = '64px';
+    links.style.left = '0';
+    links.style.right = '0';
+    links.style.background = 'rgba(11,14,20,0.98)';
+    links.style.backdropFilter = 'blur(16px)';
+    links.style.padding = '20px 24px';
+    links.style.gap = '16px';
+    links.style.borderBottom = '1px solid var(--border)';
+  });
+})();
+</script>
+
+</body>
+</html>

@@ -35,7 +35,7 @@ function fmt(s,id){
 
 // ── 状态 ──
 let threadId=crypto.randomUUID(),userId=parseInt(localStorage.getItem('js_user_id')||'0');
-let currentView='chat';
+let currentView='gap';
 let allMessages=[];
 const convMessageCache=new Map();
 const deletedThreads=new Set();
@@ -80,13 +80,14 @@ const api={
   async getFitReport(id,uid=0){const p=new URLSearchParams();if(uid)p.set('user_id',uid);const qs=p.toString();const r=await fetch('/fit_analysis_reports/'+id+(qs?'?'+qs:''));return r.json();},
   async deleteFitReport(id){const r=await fetch('/fit_analysis_reports/'+id+'?user_id='+userId,{method:'DELETE'});return r.json();},
   async rerunFitReport(id){const r=await fetch('/fit_analysis_reports/'+id+'/rerun',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:userId})});return r.json();},
-  async bossCapture(jobName,city,maxJobs,filters){const r=await fetch('/jd_sources/boss/capture',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({job_name:jobName,city,max_jobs:maxJobs,filters})});return r.json();},
+  async bossCapture(jobName,extraJobKeywords,city,maxJobs,filters){const r=await fetch('/jd_sources/boss/capture',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({job_name:jobName,extra_job_keywords:extraJobKeywords,city,max_jobs:maxJobs,filters})});return r.json();},
   async bossManualImport(jobName,jdText,title,company){const r=await fetch('/jd_sources/boss/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({job_name:jobName,jd_text:jdText,title:title||'',company:company||''})});return r.json();},
   async rebuildJobProfile(jobName,sourcePlatform,topN){const r=await fetch('/job_profiles/rebuild',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({job_name:jobName,source_platform:sourcePlatform||'boss',top_n:topN||20})});return r.json();},
   async startBossBrowser(){const r=await fetch('/boss/browser/start',{method:'POST'});return r.json();},
   async stopBossBrowser(){const r=await fetch('/boss/browser/stop',{method:'POST'});return r.json();},
   async getBossBrowserStatus(){const r=await fetch('/boss/browser/status');return r.json();},
   async openBossLogin(){const r=await fetch('/boss/browser/open-login',{method:'POST'});return r.json();},
+  async askAdvisor(reportId,question){const r=await fetch('/fit_analysis_reports/'+reportId+'/advisor',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:userId,question:question})});return r.json();},
 };
 
 function lastThreadKey(uid=userId){return 'last_thread_id_'+uid;}
@@ -118,10 +119,12 @@ const el={
   btnResumeProfile:$('btnResumeProfile'),profileSkillList:$('profileSkillList'),
   researchInput:$('researchInput'),btnResearch:$('btnResearch'),researchTimeline:$('researchTimeline'),researchBody:$('researchBody'),
   userAvatar:$('userAvatar'),userName:$('userName'),userMeta:$('userMeta'),userStats:$('userStats'),
-  insightContent:$('insightContent'),toastContainer:$('toastContainer'),
+  toastContainer:$('toastContainer'),
   btnToggleBossCapture:$('btnToggleBossCapture'),bossCaptureBody:$('bossCaptureBody'),
-  bossJobInput:$('bossJobInput'),bossCityInput:$('bossCityInput'),
-  bossExpFilter:$('bossExpFilter'),bossEduFilter:$('bossEduFilter'),bossMaxJobs:$('bossMaxJobs'),
+  bossJobInput:$('bossJobInput'),bossExtraJobInput:$('bossExtraJobInput'),bossCityInput:$('bossCityInput'),
+  bossExpFilter:$('bossExpFilter'),bossEduFilter:$('bossEduFilter'),
+  bossCompanySizeFilter:$('bossCompanySizeFilter'),bossHrActivityFilter:$('bossHrActivityFilter'),
+  bossMaxJobs:$('bossMaxJobs'),
   btnBossCapture:$('btnBossCapture'),bossManualJdInput:$('bossManualJdInput'),
   btnBossManualImport:$('btnBossManualImport'),bossCaptureStatus:$('bossCaptureStatus'),
   btnRebuildProfile:$('btnRebuildProfile'),
@@ -135,9 +138,12 @@ function switchView(v){
   localStorage.setItem('js_current_view',v);
   document.querySelectorAll('.nav-icon').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
   document.querySelectorAll('.view').forEach(vw=>vw.classList.remove('active'));
-  const viewMap={chat:'viewChat',radar:'viewRadar',gap:'viewGap',research:'viewResearch',user:'viewUser'};
-  const tgt=document.getElementById(viewMap[v]||'viewChat');
+  const viewMap={chat:'viewChat',radar:'viewRadar',gap:'viewGap',user:'viewUser'};
+  const tgt=document.getElementById(viewMap[v]||'viewGap');
   if(tgt)tgt.classList.add('active');
+  const workspaceTitle=$('workspaceTitle');
+  const viewTitle={gap:'求职适配分析',radar:'岗位技能雷达',user:'用户与数据'};
+  if(workspaceTitle)workspaceTitle.textContent=viewTitle[v]||'求职适配分析';
   if(v==='radar')loadRadarQuickTags();
   if(v==='gap'){loadGapQuickTags();loadFitReportHistory();updateGapStepper();}
   if(v==='user')loadUserCenter();
@@ -164,6 +170,7 @@ async function sendMessage(){
 
     // 2. 轮询直到完成
     let result=null;
+    let taskError=null;
     for(let i=0;i<150;i++){  // 最多5分钟(150×2s)
       await new Promise(r=>setTimeout(r,2000));
       const poll=await fetch('/task/'+taskId).then(r=>r.json());
@@ -171,13 +178,22 @@ async function sendMessage(){
       const t=poll.task;
       loadDiv.textContent=t.progress||'处理中...';
       if(t.finished){
+        if(t.status==='failed'){
+          taskError=t.error||'任务执行失败';
+          break;
+        }
+        if(t.status==='cancelled'){
+          taskError='任务已取消';
+          break;
+        }
         result=t.result;
         break;
       }
     }
     loadDiv.remove();
 
-    if(!result){throw new Error('任务未完成');}
+    if(taskError){throw new Error(taskError);}
+    if(!result){throw new Error('任务完成但没有返回结果');}
     if(result.response.includes('共完成')&&result.knowledge?.length){
       renderResearchInline(result.response,result.knowledge);
     }else{
@@ -187,7 +203,6 @@ async function sendMessage(){
     convMessageCache.set(threadId,allMessages);
     localStorage.setItem(lastThreadKey(),threadId);
     refreshSidebar();
-    updateInsight(result);
   }catch(e){loadDiv.remove();addMsg('assistant','请求出错: '+e.message);}
   el.btnSend.disabled=false;el.chatInput.focus();
 }
@@ -257,13 +272,6 @@ async function deleteConversation(tid){
     await refreshSidebar();
     toast('删除失败: '+e.message);
   }
-}
-
-function updateInsight(result){
-  if(!result||!result.knowledge)return;
-  let h='<div style="font-weight:600;font-size:0.72rem;margin-bottom:0.5rem;">情报</div>';
-  result.knowledge.slice(0,3).forEach(k=>{h+='<div style="margin-bottom:0.4rem;font-size:0.65rem;">'+esc(k.substring(0,150))+'</div>';});
-  el.insightContent.innerHTML=h;
 }
 
 // ═══════════════════════════════════════════════
@@ -692,6 +700,8 @@ function switchGapTab(tabName){
     p.classList.toggle('active',p.id===panelMap[tabName]));
   if(tabName==='history')loadFitReportHistory();
   if(tabName==='fit')updateFitSummaries();
+  const activePanel=document.getElementById(panelMap[tabName]);
+  if(activePanel)activePanel.scrollTop=0;
 }
 
 function updateGapStepper(){
@@ -712,24 +722,27 @@ function updateFitSummaries(){
     if(currentJobProfile){
       const p=normalizeJobProfile(currentJobProfile);
       jobCard.className='fit-summary-card has-data';
-      jobCard.innerHTML='<div class="gap-label">岗位画像</div>'
-        +'<div style="font-size:0.82rem;font-weight:700;margin:0.3rem 0;">'+esc(p.job_name)+'</div>'
-        +'<div style="font-size:0.7rem;color:var(--text-dim);">'+esc(p.job_type)+' · '+esc(p.employment_type)+'</div>'
-        +'<div style="font-size:0.7rem;color:var(--text-dim);">样本 '+p.valid_sample_count+' 条 · 置信度 '+esc(p.confidence)+'</div>';
+      jobCard.innerHTML='<span class="section-overline">岗位画像</span>'
+        +'<strong>'+esc(p.job_name)+'</strong>'
+        +'<p>'+esc(p.job_type)+' · '+esc(p.employment_type)
+        +'<br>有效样本 '+p.valid_sample_count+' 条 · '+esc(p.confidence)+' 置信度</p>';
     }else{
       jobCard.className='fit-summary-card';
-      jobCard.innerHTML='<div class="gap-label">岗位画像</div><div class="gap-subtle">请先完成岗位采集</div>';
+      jobCard.innerHTML='<span class="section-overline">岗位画像</span><strong>尚未准备</strong><p>请先采集或导入目标岗位 JD。</p>';
     }
   }
   if(candCard){
     if(currentCandidateProfile){
       const skills=(currentCandidateProfile.skill_stack||[]).length;
       candCard.className='fit-summary-card has-cand';
-      candCard.innerHTML='<div class="gap-label">候选人画像</div>'
-        +'<div style="font-size:0.7rem;color:var(--text-dim);margin-top:0.3rem;">识别 '+skills+' 项技能</div>';
+      const projects=(currentCandidateProfile.projects||[]).length;
+      candCard.innerHTML='<span class="section-overline">候选人画像</span>'
+        +'<strong>画像已建立</strong>'
+        +'<p>识别 '+skills+' 项技能 · '+projects+' 段项目经历'
+        +'<br>'+esc(currentCandidateProfile.confidence||'low')+' 置信度</p>';
     }else{
       candCard.className='fit-summary-card';
-      candCard.innerHTML='<div class="gap-label">候选人画像</div><div class="gap-subtle">请先上传简历</div>';
+      candCard.innerHTML='<span class="section-overline">候选人画像</span><strong>尚未准备</strong><p>请先上传或粘贴简历。</p>';
     }
   }
 }
@@ -932,6 +945,20 @@ function renderBossCaptureStatus(result){
   }
   const r=result;
   let h='<div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.5rem;">';
+  if(r.search_keywords&&r.search_keywords.length){
+    h+='<span class="capture-stat">关键词 <b>'+r.search_keywords.length+'</b> 个</span>';
+  }
+  const filterLabels={
+    company_size:'公司规模',
+    hr_activity:'HR 活跃度',
+    experience:'经验',
+    education:'学历',
+  };
+  const activityLabels={recent:'刚刚 / 在线',today:'今日活跃','3d':'3 天内','7d':'7 天内','30d':'30 天内'};
+  Object.entries(r.applied_filters||{}).forEach(([key,value])=>{
+    const display=key==='hr_activity'?(activityLabels[value]||value):value;
+    h+='<span class="capture-stat filter">'+esc(filterLabels[key]||key)+'：<b>'+esc(display)+'</b></span>';
+  });
   h+='<span class="capture-stat">发现 <b>'+r.captured_count+'</b> 条</span>';
   if(r.imported_count>0)h+='<span class="capture-stat imported">导入 <b>'+r.imported_count+'</b> 条</span>';
   if(r.detail_missing_count>0)h+='<span class="capture-stat skipped">详情缺失 <b>'+r.detail_missing_count+'</b> 条</span>';
@@ -957,18 +984,24 @@ function renderBossCaptureStatus(result){
 async function runBossCapture(){
   const jobName=el.bossJobInput.value.trim();
   if(!jobName){toast('请输入岗位关键词');return;}
+  const extraJobKeywords=String(el.bossExtraJobInput?.value||'')
+    .split(/[,，、;；\n]+/)
+    .map(item=>item.trim())
+    .filter(Boolean);
   const city=el.bossCityInput.value.trim();
   const maxJobs=parseInt(el.bossMaxJobs.value)||10;
   const filters={};
   if(el.bossExpFilter.value)filters.experience=el.bossExpFilter.value;
   if(el.bossEduFilter.value)filters.education=el.bossEduFilter.value;
+  if(el.bossCompanySizeFilter?.value)filters.company_size=el.bossCompanySizeFilter.value;
+  if(el.bossHrActivityFilter?.value)filters.hr_activity=el.bossHrActivityFilter.value;
 
   el.btnBossCapture.disabled=true;
   el.btnBossCapture.textContent='采集中...';
   el.bossCaptureStatus.innerHTML='<div style="display:flex;align-items:center;gap:0.5rem;"><div class="spinner" style="width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.8s linear infinite;"></div><span>正在采集 Boss 直聘 JD...</span></div>';
 
   try{
-    const res=await api.bossCapture(jobName,city,maxJobs,filters);
+    const res=await api.bossCapture(jobName,extraJobKeywords,city,maxJobs,filters);
     if(res.code!==200)throw new Error(res.message||'采集失败');
     bossCaptureResult=res;
     renderBossCaptureStatus(res);
@@ -991,7 +1024,7 @@ async function runBossCapture(){
     toast('采集失败: '+e.message);
   }finally{
     el.btnBossCapture.disabled=false;
-    el.btnBossCapture.textContent='启动采集';
+    el.btnBossCapture.textContent='开始采集';
   }
 }
 
@@ -1094,6 +1127,8 @@ async function runGapAnalysis(){
     const fitRes=await api.createFitAnalysis(userId,jobProfileId,candRes.candidate_profile_id);
     if(fitRes.code!==200)throw new Error(fitRes.message||'适配分析失败');
     currentFitReport=fitRes.report;
+    currentFitReport.id=fitRes.fit_analysis_id;
+    currentCandidateProfile.id=currentCandidateProfile.id||candRes.candidate_profile_id;
     currentAnalysisMode=fitRes.analysis_mode||'agent';
     currentRuleScore=fitRes.rule_score||0;
 
@@ -1133,9 +1168,9 @@ async function runGapAnalysis(){
 // ── v0.13 评估反馈按钮 ──
 function renderEvalButtons(targetType,targetId){
   const btns=[
-    {label:'✓ 准确',action:'correct',isCorrect:true},
-    {label:'✕ 不准确',action:'wrong',isCorrect:false,errorType:'wrong_info'},
-    {label:'⚠ 缺少信息',action:'missing',isCorrect:false,errorType:'missing_info'},
+    {label:'准确',action:'correct',isCorrect:true},
+    {label:'不准确',action:'wrong',isCorrect:false,errorType:'wrong_info'},
+    {label:'缺少信息',action:'missing',isCorrect:false,errorType:'missing_info'},
   ];
   return '<div class="eval-feedback-row">'
     +btns.map(b=>'<button class="eval-btn" data-type="'+targetType+'" data-id="'+targetId
@@ -1177,9 +1212,9 @@ document.addEventListener('click',async e=>{
 // ── v0.11 画像 + Agent 适配报告渲染 ──
 function renderProfileReport(jobProfile,candidateProfile,fitReport,errorMsg){
   if(errorMsg){
-    el.gapResult.innerHTML='<div class="radar-empty" style="text-align:center;padding:2rem;">'
-      +'<div style="font-size:1.5rem;margin-bottom:0.5rem;">📋</div>'
-      +'<div>'+esc(errorMsg)+'</div>'
+    el.gapResult.innerHTML='<div class="empty-state report-empty">'
+      +'<span>!</span><strong>暂时无法生成报告</strong>'
+      +'<p>'+esc(errorMsg)+'</p>'
       +'</div>';
     return;
   }
@@ -1189,199 +1224,216 @@ function renderProfileReport(jobProfile,candidateProfile,fitReport,errorMsg){
   const fitLevel=fit.overall_fit_level||'moderate';
   const fitScore=Math.round(Number(fit.overall_score)||0);
   const mode=currentAnalysisMode||'agent';
+  const dimLabel={
+    capability_fit:'能力匹配',
+    experience_relevance:'经历相关',
+    growth_potential:'成长潜力',
+    evidence_strength:'证据充分',
+    risks_and_gaps:'风险短板',
+  };
+  const strengths=fit.strengths||[];
+  const gaps=fit.gaps||[];
+  const learning=fit.learning_plan||[];
+  const interview=fit.interview_strategy||[];
+  const refs=fit.evidence_refs||[];
+  const resps=job.responsibilities||[];
+  const musts=job.must_have_capabilities||[];
+  const nices=job.nice_to_have_capabilities||[];
+  const skills=(cand.skill_stack||[]).map(s=>s.skill||s);
+  const projs=cand.projects||[];
+  const achs=cand.achievements||[];
+  const risks=cand.risk_points||[];
+  const edu=cand.education_background||{};
+  const reportId=fit.id||fitReport?.id||0;
+  const jobId=currentJobProfile?.id||currentJobProfile?._id||job.id||0;
+  const candidateId=currentCandidateProfile?.id||currentCandidateProfile?._id||cand.id||0;
 
-  // ── 辅助函数 ──
-  const dimLabel={capability_fit:'能力匹配',experience_relevance:'经历相关',growth_potential:'成长潜力',evidence_strength:'证据充分',risks_and_gaps:'风险短板'};
-  const dimIcon={capability_fit:'🎯',experience_relevance:'📂',growth_potential:'🌱',evidence_strength:'📋',risks_and_gaps:'⚠️'};
+  let h='<div class="analysis-report-shell">';
 
-  // ── 三卡片布局 ──
-  let h='<div class="fit-report-three-col">';
+  h+='<section class="report-overview">';
+  h+='<div class="report-score-panel">';
+  h+='<div class="report-score-value">'+fitScore+'<small>/100</small></div>';
+  h+='<div class="report-score-label">综合适配分</div>';
+  h+='<span class="report-level screening-risk '+riskClass(fitLevel)+'">适配'+riskLabel(fitLevel)+'</span>';
+  h+='</div>';
+  h+='<div class="report-summary-panel">';
+  h+='<span class="section-overline">差距分析结论</span>';
+  h+='<h3>'+esc(job.job_name||gapCurrentJob||'目标岗位')+'</h3>';
+  h+='<p>'+esc(fit.fit_summary||'已完成岗位画像与候选人画像对比。请结合五维评分和证据判断下一步行动。')+'</p>';
+  h+='<div class="report-meta-row">';
+  h+='<span>'+(mode==='agent'?'AI 综合分析':'规则兜底分析')+'</span>';
+  h+='<span>'+esc(fit.confidence||'low')+' 置信度</span>';
+  if(currentRuleScore)h+='<span>规则基准 '+Math.round(currentRuleScore)+'</span>';
+  h+='</div></div></section>';
 
-  // ═══ 卡片1：岗位画像 ═══
-  h+='<div class="fit-report-card job-card">';
-  h+='<div class="fit-report-card-title">岗位画像</div>';
+  h+='<section class="fit-dims-grid">';
+  Object.entries(dimLabel).forEach(([key,label])=>{
+    const dim=fit[key]||{};
+    const score=Math.round(Number(dim.score)||0);
+    const level=dim.level||'moderate';
+    h+='<article class="fit-dim-card dim-'+esc(level)+'">';
+    h+='<div class="fit-dim-head"><span class="fit-dim-label">'+esc(label)+'</span><span class="fit-dim-level">'+esc(level)+'</span></div>';
+    h+='<div class="fit-dim-score">'+score+'<small>/100</small></div>';
+    h+='<div class="fit-dim-summary">'+esc(dim.summary||'暂无维度说明')+'</div>';
+    if((dim.evidence_refs||[]).length){
+      h+='<div class="fit-dim-refs">';
+      dim.evidence_refs.slice(0,2).forEach(r=>{h+='<span class="fit-dim-ref">'+esc(r)+'</span>';});
+      h+='</div>';
+    }
+    h+='</article>';
+  });
+  h+='</section>';
+
+  h+='<section class="fit-report-three-col">';
+  h+='<article class="fit-report-card job-card"><div class="fit-report-card-title">岗位需要什么</div>';
   h+='<div class="profile-kv-grid">';
   h+='<div class="profile-kv-item"><span>岗位类型</span><b>'+esc(job.job_type||'未知')+'</b></div>';
-  h+='<div class="profile-kv-item"><span>用工类型</span><b>'+esc(job.employment_type||'未明确')+'</b></div>';
-  h+='<div class="profile-kv-item"><span>面向人群</span><b>'+esc(job.target_audience||'未明确')+'</b></div>';
-  h+='<div class="profile-kv-item"><span>学历要求</span><b>'+esc(job.education_preference||'未明确')+'</b></div>';
   h+='<div class="profile-kv-item"><span>经验要求</span><b>'+esc(job.experience_requirement||'未明确')+'</b></div>';
-  h+='<div class="profile-kv-item"><span>样本</span><b>'+(job.valid_sample_count||job.sample_count||0)+' 条 JD</b></div>';
+  h+='<div class="profile-kv-item"><span>有效样本</span><b>'+(job.valid_sample_count||job.sample_count||0)+' 条 JD</b></div>';
   h+='</div>';
-
-  // 职责
-  const resps=job.responsibilities||[];
-  if(resps.length){
-    h+='<div class="profile-section"><div class="profile-section-title">核心职责</div><ul class="profile-resp-list">';
-    resps.slice(0,4).forEach(r=>{h+='<li>'+esc(r)+'</li>';});
-    h+='</ul></div>';
-  }
-
-  // 必备能力
-  const musts=job.must_have_capabilities||[];
   if(musts.length){
     h+='<div class="profile-section"><div class="profile-section-title">必备能力</div><div class="profile-chip-row">';
-    musts.slice(0,8).forEach(s=>{h+='<span class="profile-chip must">'+esc(s)+'</span>';});
+    musts.slice(0,10).forEach(s=>{h+='<span class="profile-chip must">'+esc(s)+'</span>';});
     h+='</div></div>';
   }
-
-  // 加分能力
-  const nices=job.nice_to_have_capabilities||[];
   if(nices.length){
     h+='<div class="profile-section"><div class="profile-section-title">加分能力</div><div class="profile-chip-row">';
     nices.slice(0,6).forEach(s=>{h+='<span class="profile-chip nice">'+esc(s)+'</span>';});
     h+='</div></div>';
   }
-
-  // 业务场景
-  const biz=job.business_context||[];
-  if(biz.length){
-    h+='<div class="profile-section"><div class="profile-section-title">业务场景</div><div class="profile-chip-row">';
-    biz.slice(0,4).forEach(s=>{h+='<span class="profile-chip">'+esc(s)+'</span>';});
-    h+='</div></div>';
+  if(resps.length){
+    h+='<div class="profile-section"><div class="profile-section-title">核心职责</div><ul class="profile-resp-list">';
+    resps.slice(0,4).forEach(r=>{h+='<li>'+esc(r)+'</li>';});
+    h+='</ul></div>';
   }
+  h+='</article>';
 
-  h+='<div class="profile-kv"><span>置信度</span><b>'+esc(job.confidence||'low')+'</b></div>';
-  h+='</div>';
-
-  // ═══ 卡片2：候选人画像 ═══
-  h+='<div class="fit-report-card cand-card">';
-  h+='<div class="fit-report-card-title">候选人画像</div>';
-  const edu=cand.education_background||{};
+  h+='<article class="fit-report-card cand-card"><div class="fit-report-card-title">你已经有什么</div>';
   h+='<div class="profile-kv-grid">';
   h+='<div class="profile-kv-item"><span>学历</span><b>'+esc(edu.degree||'未识别')+'</b></div>';
-  h+='<div class="profile-kv-item"><span>院校</span><b>'+esc(edu.school||'未识别')+'</b></div>';
-  h+='<div class="profile-kv-item"><span>专业</span><b>'+esc(edu.major||'未识别')+'</b></div>';
-  h+='<div class="profile-kv-item"><span>毕业年份</span><b>'+esc(edu.graduation_year||'未识别')+'</b></div>';
-  h+='<div class="profile-kv-item"><span>技能数</span><b>'+(cand.skill_stack||[]).length+'</b></div>';
-  h+='<div class="profile-kv-item"><span>项目数</span><b>'+(cand.projects||[]).length+'</b></div>';
+  h+='<div class="profile-kv-item"><span>技能</span><b>'+skills.length+' 项</b></div>';
+  h+='<div class="profile-kv-item"><span>项目</span><b>'+projs.length+' 段</b></div>';
   h+='</div>';
-
-  // 技能栈
-  const skills=(cand.skill_stack||[]).map(s=>s.skill||s);
   if(skills.length){
-    h+='<div class="profile-section"><div class="profile-section-title">技能栈</div><div class="profile-chip-row">';
-    skills.slice(0,10).forEach(s=>{h+='<span class="profile-chip must">'+esc(s)+'</span>';});
+    h+='<div class="profile-section"><div class="profile-section-title">技能证据</div><div class="profile-chip-row">';
+    skills.slice(0,12).forEach(s=>{h+='<span class="profile-chip must">'+esc(s)+'</span>';});
     h+='</div></div>';
   }
-
-  // 项目经历
-  const projs=cand.projects||[];
   if(projs.length){
     h+='<div class="profile-section"><div class="profile-section-title">项目经历</div><ul class="profile-resp-list">';
     projs.slice(0,3).forEach(p=>{
       const desc=p.description||p.name||'';
-      h+='<li>'+esc(desc.length>80?desc.substring(0,80)+'...':desc)+'</li>';
+      h+='<li>'+esc(desc.length>100?desc.substring(0,100)+'…':desc)+'</li>';
     });
     h+='</ul></div>';
   }
-
-  // 实习/工作
-  const interns=cand.internships||[];
-  const works=cand.work_experiences||[];
-  if(interns.length||works.length){
-    h+='<div class="profile-section"><div class="profile-section-title">实习/工作经历</div><ul class="profile-resp-list">';
-    interns.slice(0,2).forEach(i=>{h+='<li>'+esc((i.description||'').substring(0,80))+'</li>';});
-    works.slice(0,2).forEach(w=>{h+='<li>'+esc((w.description||'').substring(0,80))+'</li>';});
-    h+='</ul></div>';
-  }
-
-  // 成果
-  const achs=cand.achievements||[];
   if(achs.length){
     h+='<div class="profile-section"><div class="profile-section-title">成果证据</div><ul class="profile-resp-list">';
     achs.slice(0,3).forEach(a=>{h+='<li>'+esc(a.description||'')+'</li>';});
     h+='</ul></div>';
   }
-
-  // 风险点
-  const risks=cand.risk_points||[];
   if(risks.length){
-    h+='<div class="profile-section"><div style="padding:0.4rem 0.6rem;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);border-radius:var(--radius-sm);">';
-    h+='<div style="font-size:0.65rem;font-weight:600;color:var(--gold);margin-bottom:0.2rem;">⚠ 提示</div>';
-    risks.forEach(r=>{h+='<div style="font-size:0.62rem;color:var(--text-dim);">• '+esc(r)+'</div>';});
-    h+='</div></div>';
+    h+='<div class="profile-section"><div class="profile-section-title">信息提醒</div><ul class="profile-resp-list">';
+    risks.slice(0,4).forEach(r=>{h+='<li>'+esc(r)+'</li>';});
+    h+='</ul></div>';
   }
+  h+='</article>';
 
-  h+='<div class="profile-kv"><span>置信度</span><b>'+esc(cand.confidence||'low')+'</b></div>';
-  h+='</div>';
-
-  // ═══ 卡片3：行动建议 ═══
-  h+='<div class="fit-report-card action-card">';
-  h+='<div class="fit-report-card-title">行动建议</div>';
-
-  // 总分
-  h+='<div style="text-align:center;margin-bottom:0.8rem;">';
-  h+='<div style="font-size:2rem;font-weight:800;color:var(--text);">'+fitScore+'</div>';
-  h+='<div style="font-size:0.7rem;color:var(--text-dim);">适配分 / 100</div>';
-  h+='<span class="screening-risk '+riskClass(fitLevel)+'" style="margin-top:0.3rem;display:inline-block;">适配'+riskLabel(fitLevel)+'</span>';
-  h+='</div>';
-
-  // 五维评分
-  h+='<div class="profile-section"><div class="profile-section-title">五维评分</div>';
-  for(const[key,label] of Object.entries(dimLabel)){
-    const dim=fit[key]||{};
-    const score=Math.round(dim.score||0);
-    const level=dim.level||'moderate';
-    const levelCls=level==='strong'?'color:var(--green)':level==='moderate'?'color:var(--gold)':'color:var(--red)';
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:0.2rem 0;font-size:0.72rem;">';
-    h+='<span style="color:var(--text-dim);">'+(dimIcon[key]||'')+' '+esc(label)+'</span>';
-    h+='<span style="font-family:var(--mono);font-weight:600;'+levelCls+'">'+score+' <small style="color:var(--text-muted)">/100</small></span>';
-    h+='</div>';
-  }
-  h+='</div>';
-
-  // 优势
-  const strengths=fit.strengths||[];
+  h+='<article class="fit-report-card action-card"><div class="fit-report-card-title">差距与下一步</div>';
   if(strengths.length){
-    h+='<div class="profile-section"><div class="profile-section-title">✓ 优势</div><ul class="profile-resp-list">';
-    strengths.forEach(s=>{h+='<li>'+esc(s)+'</li>';});
+    h+='<div class="profile-section"><div class="profile-section-title">可直接放大的优势</div><ul class="profile-resp-list">';
+    strengths.slice(0,5).forEach(s=>{h+='<li>'+esc(s)+'</li>';});
     h+='</ul></div>';
   }
-
-  // 差距
-  const gaps=fit.gaps||[];
   if(gaps.length){
-    h+='<div class="profile-section"><div class="profile-section-title">✕ 差距</div><ul class="profile-resp-list">';
-    gaps.forEach(g=>{h+='<li>'+esc(g)+'</li>';});
+    h+='<div class="profile-section"><div class="profile-section-title">优先补齐的差距</div><ul class="profile-resp-list">';
+    gaps.slice(0,6).forEach(g=>{h+='<li>'+esc(g)+'</li>';});
     h+='</ul></div>';
   }
-
-  // 学习计划
-  const learning=fit.learning_plan||[];
   if(learning.length){
-    h+='<div class="profile-section"><div class="profile-section-title">📚 学习计划</div><ul class="profile-resp-list">';
+    h+='<div class="profile-section"><div class="profile-section-title">行动顺序</div><ol class="action-list">';
     learning.slice(0,5).forEach(l=>{h+='<li>'+esc(l)+'</li>';});
-    h+='</ul></div>';
+    h+='</ol></div>';
   }
-
-  // 面试策略
-  const interview=fit.interview_strategy||[];
   if(interview.length){
-    h+='<div class="profile-section"><div class="profile-section-title">🎯 面试策略</div><ul class="profile-resp-list">';
+    h+='<div class="profile-section"><div class="profile-section-title">面试准备</div><ul class="profile-resp-list">';
     interview.slice(0,4).forEach(s=>{h+='<li>'+esc(s)+'</li>';});
     h+='</ul></div>';
   }
+  h+='</article></section>';
 
-  // 证据引用
-  const refs=fit.evidence_refs||[];
   if(refs.length){
-    h+='<div class="profile-section"><div class="profile-section-title">📎 证据引用</div>';
-    h+='<div style="font-size:0.65rem;color:var(--text-muted);max-height:80px;overflow-y:auto;">';
-    refs.slice(0,6).forEach(r=>{h+='<div style="margin-bottom:0.2rem;">• '+esc(r)+'</div>';});
-    h+='</div></div>';
+    h+='<section class="report-evidence surface-panel"><div><span class="section-overline">Evidence</span><h4>报告依据</h4></div><div class="report-evidence-list">';
+    refs.slice(0,8).forEach(r=>{h+='<span>'+esc(r)+'</span>';});
+    h+='</div></section>';
   }
 
-  h+='</div>';
-
-  // 评估反馈按钮
-  const reportId=fitReport?.id||0;
-  if(currentJobProfile?.id)h+=renderEvalButtons('job_profile',currentJobProfile.id);
-  if(currentCandidateProfile?.id)h+=renderEvalButtons('candidate_profile',currentCandidateProfile.id);
-  if(reportId)h+=renderFitEvalButtons(reportId);
+  if(jobId||candidateId||reportId){
+    h+='<section class="report-feedback">';
+    if(jobId)h+=renderEvalButtons('job_profile',jobId);
+    if(candidateId)h+=renderEvalButtons('candidate_profile',candidateId);
+    if(reportId)h+=renderFitEvalButtons(reportId);
+    h+='</section>';
+  }
+  if(reportId&&jobId&&candidateId)h+=renderAdvisorSection(reportId);
 
   h+='</div>';
   el.gapResult.innerHTML=h;
+
+  if(reportId)bindAdvisorEvents(reportId);
+}
+
+function renderAdvisorSection(reportId){
+  return '<div class="advisor-section">'
+    +'<span class="section-overline">Report advisor</span>'
+    +'<div class="fit-report-card-title">基于当前报告继续追问</div>'
+    +'<div class="advisor-questions">'
+    +'<button class="advisor-q-btn" data-q="为什么是'+esc(currentFitReport?.overall_fit_level||'这个')+'适配等级？">为什么是这个适配等级？</button>'
+    +'<button class="advisor-q-btn" data-q="我最应该优先补什么？">我最应该优先补什么？</button>'
+    +'<button class="advisor-q-btn" data-q="如何优化这份简历？">如何优化简历？</button>'
+    +'<button class="advisor-q-btn" data-q="针对该岗位如何准备面试？">面试准备建议</button>'
+    +'</div>'
+    +'<div class="advisor-input-row">'
+    +'<input type="text" class="advisor-input" id="advisorInput" placeholder="输入你的问题..." />'
+    +'<button class="advisor-send-btn" id="btnAdvisorSend">提问</button>'
+    +'</div>'
+    +'<div id="advisorAnswer" class="advisor-answer"></div>'
+    +'</div>';
+}
+
+function bindAdvisorEvents(reportId){
+  document.querySelectorAll('.advisor-q-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{askAdvisor(reportId,btn.dataset.q);});
+  });
+  const sendBtn=$('btnAdvisorSend');
+  const input=$('advisorInput');
+  if(sendBtn&&input){
+    sendBtn.addEventListener('click',()=>{const q=input.value.trim();if(q)askAdvisor(reportId,q);});
+    input.addEventListener('keydown',e=>{if(e.key==='Enter'){const q=input.value.trim();if(q)askAdvisor(reportId,q);}});
+  }
+}
+
+async function askAdvisor(reportId,question){
+  const answerEl=$('advisorAnswer');
+  if(!answerEl)return;
+  answerEl.innerHTML='<div style="display:flex;align-items:center;gap:0.5rem;"><div class="spinner" style="width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin 0.8s linear infinite;"></div><span>顾问分析中...</span></div>';
+  try{
+    const res=await api.askAdvisor(reportId,question);
+    if(res.code===200&&res.answer){
+      let a='<div class="advisor-answer-content">'+fmt(res.answer)+'</div>';
+      if(res.evidence_refs&&res.evidence_refs.length){
+        a+='<div class="advisor-refs"><span style="font-size:0.62rem;color:var(--text-muted);">依据: </span>';
+        res.evidence_refs.slice(0,3).forEach(r=>{a+='<span class="advisor-ref-tag">'+esc(r)+'</span>';});
+        a+='</div>';
+      }
+      a+='<div style="font-size:0.6rem;color:var(--text-muted);margin-top:0.3rem;">'+esc(res.analysis_mode==='agent'?'AI 分析':'规则分析')+'</div>';
+      answerEl.innerHTML=a;
+    }else{
+      answerEl.innerHTML='<div style="color:var(--gold);font-size:0.72rem;">'+esc(res.message||'无法生成回答')+'</div>';
+    }
+  }catch(e){
+    answerEl.innerHTML='<div style="color:var(--red);font-size:0.72rem;">请求失败: '+esc(e.message)+'</div>';
+  }
 }
 
 // ── v0.22/v0.23 历史报告管理 ──
@@ -1787,42 +1839,42 @@ if(el.bossJobInput){
 }
 
 // ═══════════════════════════════════════════════
-// 视图4: 深度研究
+// legacy: 深度研究（保留代码，默认隐藏）
 // ═══════════════════════════════════════════════
-el.btnResearch.addEventListener('click',async()=>{
-  const text=el.researchInput.value.trim();if(!text)return;
-  el.researchTimeline.innerHTML='<span style="color:var(--green)">拆解需求</span> → <span style="color:var(--blue)">并行执行中...</span> → 聚合结果';
-  el.researchBody.innerHTML='<div class="msg-loading"></div>';
-  try{
-    // 直调 /research 端点，绕过 ChatAgent，直接走研究流程
-    const result=await fetch('/research',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({topic:text})}).then(r=>r.json());
-    if(result.knowledge?.length){
-      el.researchTimeline.innerHTML='<span style="color:var(--green)">拆解需求</span> → <span style="color:var(--green)">并行执行</span> → <span style="color:var(--green)">聚合结果</span>';
-      const cats={技能:'skill',薪资:'salary',公司:'company',面试:'interview'};
-      let h='<div class="research-grid">';
-      result.knowledge.forEach((card,i)=>{
-        const lines=card.split('\n'),title=lines[0].replace('## ',''),items=lines.filter(l=>l.startsWith('- ')),src=lines.find(l=>l.startsWith('*'));
-        const cat=Object.entries(cats).find(([k])=>title.includes(k))?.[1]||'default';
-        h+='<div class="research-card cat-'+cat+'" style="animation-delay:'+(i*0.08)+'s">'
-          +'<div class="rc-title">'+esc(title)+'</div>'
-          +'<div class="rc-items">'+items.map(it=>'<span class="rc-item">'+esc(it.replace('- ',''))+'</span>').join('')+'</div>'
-          +(src?'<div class="rc-source">'+esc(src.replace(/\*/g,''))+'</div>':'')
-          +'</div>';
-      });
-      h+='</div>';
-      el.researchBody.innerHTML=h;
-    }else{
-      el.researchBody.innerHTML='<div class="radar-empty">未获取到研究结果</div>';
+if(el.btnResearch){
+  el.btnResearch.addEventListener('click',async()=>{
+    const text=el.researchInput.value.trim();if(!text)return;
+    el.researchTimeline.innerHTML='<span style="color:var(--green)">拆解需求</span> → <span style="color:var(--blue)">并行执行中...</span> → 聚合结果';
+    el.researchBody.innerHTML='<div class="msg-loading"></div>';
+    try{
+      const result=await fetch('/research',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({topic:text})}).then(r=>r.json());
+      if(result.knowledge?.length){
+        el.researchTimeline.innerHTML='<span style="color:var(--green)">拆解需求</span> → <span style="color:var(--green)">并行执行</span> → <span style="color:var(--green)">聚合结果</span>';
+        const cats={技能:'skill',薪资:'salary',公司:'company',面试:'interview'};
+        let h='<div class="research-grid">';
+        result.knowledge.forEach((card,i)=>{
+          const lines=card.split('\n'),title=lines[0].replace('## ',''),items=lines.filter(l=>l.startsWith('- ')),src=lines.find(l=>l.startsWith('*'));
+          const cat=Object.entries(cats).find(([k])=>title.includes(k))?.[1]||'default';
+          h+='<div class="research-card cat-'+cat+'" style="animation-delay:'+(i*0.08)+'s">'
+            +'<div class="rc-title">'+esc(title)+'</div>'
+            +'<div class="rc-items">'+items.map(it=>'<span class="rc-item">'+esc(it.replace('- ',''))+'</span>').join('')+'</div>'
+            +(src?'<div class="rc-source">'+esc(src.replace(/\*/g,''))+'</div>':'')
+            +'</div>';
+        });
+        h+='</div>';
+        el.researchBody.innerHTML=h;
+      }else{
+        el.researchBody.innerHTML='<div class="radar-empty">未获取到研究结果</div>';
+      }
+    }catch(e){
+      el.researchBody.innerHTML='<div class="radar-empty">请求出错: '+esc(e.message)+'</div>';
     }
-    updateInsight(result);
-  }catch(e){
-    el.researchBody.innerHTML='<div class="radar-empty">请求出错: '+esc(e.message)+'</div>';
-  }
-});
-el.researchInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();el.btnResearch.click();}});
+  });
+}
+if(el.researchInput)el.researchInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();el.btnResearch.click();}});
 
 // ═══════════════════════════════════════════════
-// 视图5: 用户中心
+// 视图4: 用户中心
 // ═══════════════════════════════════════════════
 async function loadUserCenter(){
   const name=localStorage.getItem('js_username')||('用户_'+threadId.slice(0,8));
@@ -1962,11 +2014,11 @@ el.btnNewChat.addEventListener('click',()=>{threadId=crypto.randomUUID();allMess
   const urlReportId=new URLSearchParams(window.location.search).get('report_id');
   if(urlReportId){
     switchView('gap');
+    switchGapTab('fit');
     viewFitReport(urlReportId);
     loadFitReportHistory();
-  }else if(localStorage.getItem('js_current_view')==='gap'){
-    switchView('gap');
   }else{
-    el.chatInput.focus();
+    const savedView=localStorage.getItem('js_current_view');
+    switchView(savedView==='radar'||savedView==='user'?savedView:'gap');
   }
 })();
