@@ -1,5 +1,7 @@
 # JobLab — AI 求职适配分析平台
 
+> ⚠️ **声明：** 当前版本主要面向本地运行和开发体验，尚未提供完整的生产级身份认证、权限隔离和 API 限流，请勿直接部署到公网。详见 [SECURITY.md](SECURITY.md)。
+
 基于 Boss JD 采集、简历解析和画像匹配的求职适配分析工具。
 
 ## 产品与落地页文档
@@ -50,18 +52,24 @@ playwright install chromium
 
 ### 3. 配置环境变量
 
-创建 `.env` 文件：
+从示例模板创建 `.env` 文件：
 
-```env
-DATABASE_URL=mysql+pymysql://用户名:密码@localhost:3306/joblab
-# 或使用 SQLite
-# DATABASE_URL=sqlite:///data/joblab.db
-
-# LLM（可选，不配置则使用规则兜底）
-DEEPSEEK_API_KEY=your_key
-MODEL_BASE_URL=https://api.deepseek.com
-MODEL_NAME=deepseek-v4-pro
+```bash
+cp .env.example .env
 ```
+
+然后编辑 `.env`，填入你自己的 API Key。你需要在对应的平台（DeepSeek、DashScope、AnySearch 等）自行注册并申请 Key。**请勿将 `.env` 文件提交到版本控制。**
+
+主要变量说明：
+
+| 变量名 | 是否必需 | 说明 |
+|--------|----------|------|
+| `DATABASE_URL` | 是 | 数据库连接字符串（默认 SQLite） |
+| `DEEPSEEK_API_KEY` | AI 分析需要 | DeepSeek API Key，用于 LLM 分析 |
+| `MODEL_BASE_URL` | 是 | LLM API 地址 |
+| `MODEL_NAME` | 是 | LLM 模型名称 |
+| `DASHSCOPE_API_KEY` | 可选 | 用于语义向量嵌入 |
+| `ANYSEARCH_API_KEY` | 可选 | 用于联网搜索 |
 
 ### 4. 启动服务
 
@@ -141,7 +149,8 @@ python scripts/seed_demo_data.py
 
 - **不自动投递**：系统只采集和分析，不自动投递简历
 - **不绕过验证码**：遇到验证码/风控时暂停，提示用户手动处理
-- **不保存账号密码**：Boss 登录状态保存在本地浏览器 profile，不上传服务器
+- **不保存账号密码**：Boss 登录状态保存在本地浏览器 profile（`.boss_profile/`），不上传服务器
+- **简历数据处理**：原始上传文件仅在本地解析，不会上传给 JobLab 项目维护者；启用 AI 分析时，简历文本和结构化画像可能发送至用户自行配置的 LLM 服务商，请查看对应服务商的隐私和数据保留政策；不配置模型密钥时使用规则兜底
 - **仅用于主动分析**：用户主动触发采集和分析，不自动运行
 
 ## 数据清理
@@ -252,3 +261,16 @@ JobSearch/
 - v0.27 — 岗位画像质量提升
 - v0.26 — tab 式工作台 + 采集自动生成画像
 - v0.25 — Boss 浏览器采集
+
+## 反馈与支持
+
+- 发现 Bug？[提交 Issue](https://github.com/babanooi/JobSearch/issues)
+- 觉得有用？点个 ⭐ 支持一下
+- 安全问题？请查看 [SECURITY.md](SECURITY.md)
+
+## 免责声明
+
+- JobLab **不保证**获得面试邀请或 Offer。
+- JobLab **不会**自动投递简历。
+- JobLab **不会**绕过任何平台的反爬机制。
+- JobLab 是**个人分析工具**，不是求职自动投递服务。

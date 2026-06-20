@@ -1,5 +1,7 @@
 # JobLab — AI Job Fit Analysis
 
+> ⚠️ **Disclaimer:** This version is intended for local development and evaluation. It does not yet provide production-grade authentication, authorization, or API rate limiting. Do not expose it directly to the public internet. See [SECURITY.md](SECURITY.md) for details.
+
 JobLab turns real job descriptions and a candidate resume into two structured profiles, then produces an evidence-based fit report with gaps and next actions.
 
 [中文说明](README_CN.md)
@@ -51,14 +53,24 @@ pip install -r requirements.txt
 playwright install firefox
 ```
 
-Create `.env`:
+Create `.env` from the example template:
 
-```env
-DATABASE_URL=sqlite:///data/joblab.db
-DEEPSEEK_API_KEY=your_key
-MODEL_BASE_URL=https://api.deepseek.com
-MODEL_NAME=deepseek-v4-pro
+```bash
+cp .env.example .env
 ```
+
+Then edit `.env` and fill in your own API keys. You must register at the respective providers (DeepSeek, DashScope, AnySearch, etc.) and obtain your own keys. **Never commit your `.env` file.**
+
+Key variables:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | Yes | Database connection string (default: SQLite) |
+| `DEEPSEEK_API_KEY` | For AI analysis | DeepSeek API key for LLM-powered analysis |
+| `MODEL_BASE_URL` | Yes | LLM API base URL |
+| `MODEL_NAME` | Yes | LLM model name |
+| `DASHSCOPE_API_KEY` | Optional | For semantic embeddings |
+| `ANYSEARCH_API_KEY` | Optional | For web search |
 
 Start the service:
 
@@ -87,7 +99,8 @@ Use the project's actual virtual environment when running Python checks.
 
 - JobLab does not submit applications automatically.
 - It does not bypass CAPTCHAs or recruitment-site risk controls.
-- Boss login remains inside the local persistent browser profile.
+- Boss login remains inside the local persistent browser profile (`.boss_profile/`).
+- Uploaded source files are parsed locally and are not uploaded to the JobLab maintainer. When AI analysis is enabled, resume text and structured profiles may be sent to your configured LLM provider — review that provider's privacy and data retention policy. Without an API key, JobLab falls back to rule-based analysis.
 - Runtime data, browser profiles, databases, uploaded resumes, generated output, and IDE settings are excluded from Git.
 
 ## Repository layout
@@ -105,3 +118,16 @@ docs/                Product and integration documentation
 ```
 
 Current stable frontend milestone: `product-mvp-v0.41`.
+
+## Contributing and Feedback
+
+- Found a bug? [Open an Issue](https://github.com/babanooi/JobSearch/issues)
+- Like the project? Give it a ⭐ to show support
+- Security concerns? See [SECURITY.md](SECURITY.md)
+
+## Disclaimer
+
+- JobLab does **not** guarantee interview invitations or job offers.
+- JobLab does **not** automatically submit applications on your behalf.
+- JobLab does **not** bypass any platform's anti-bot protections.
+- JobLab is a **personal analysis tool**, not a job application automation service.
