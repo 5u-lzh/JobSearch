@@ -1,133 +1,278 @@
-# JobLab — AI Job Fit Analysis
+# JobLab — AI 求职适配分析平台
 
-> ⚠️ **Disclaimer:** This version is intended for local development and evaluation. It does not yet provide production-grade authentication, authorization, or API rate limiting. Do not expose it directly to the public internet. See [SECURITY.md](SECURITY.md) for details.
+> ⚠️ **声明：** 当前版本主要面向本地运行和开发体验，尚未提供完整的生产级身份认证、权限隔离和 API 限流，请勿直接部署到公网。详见 [SECURITY.md](SECURITY.md)。
 
-JobLab turns real job descriptions and a candidate resume into two structured profiles, then produces an evidence-based fit report with gaps and next actions.
+基于 Boss JD 采集、简历解析和画像匹配的求职适配分析工具。
 
-[中文说明](README_CN.md)
+[English](README_EN.md)
 
-## Product flow
+## 产品与落地页文档
 
-```text
-Collect job descriptions
-→ Build the job profile
-→ Parse the resume
-→ Build the candidate profile
-→ Generate the fit report
+- [产品落地页开发说明](docs/landing-page-product-brief.md) — 产品定位、目标用户、功能边界、页面结构、文案与验收清单
+- [功能服务前端 API 接口说明](docs/frontend-api-reference.md) — 主流程、请求响应、页面状态和后端限制
+- [MVP 产品规划](docs/product-plan-mvp.md)
+- [内容策略](docs/content-strategy.md)
+
+## 核心流程
+
+```
+① 采集岗位 JD → ② 生成岗位画像 → ③ 上传简历 → ④ 生成候选人画像 → ⑤ 适配分析报告
 ```
 
-The current Product MVP includes:
+1. **岗位采集**：通过 Playwright 浏览器采集 Boss 直聘 JD，支持手动粘贴
+2. **岗位画像**：从多条 JD 中提取职责、技能、学历、业务场景等结构化画像
+3. **简历画像**：解析简历文本，提取教育背景、技能栈、项目经历、成果证据
+4. **适配分析**：五维评分（能力匹配、经历相关、成长潜力、证据充分、风险短板）
+5. **历史报告**：查看、对比、重新分析历史适配报告
 
-- A product landing page at `/`
-- A job-fit workbench at `/app`
-- Boss Zhipin browser-assisted JD collection and manual JD import
-- Primary and supplementary job keywords
-- Experience, education, company-size, HR-activity, and city filters
-- Resume parsing for PDF, DOCX, and TXT
-- Five-dimensional fit analysis
-- Report history, reruns, evaluation feedback, and contextual advisor questions
+## 技术栈
 
-## Documentation
+| 层级 | 技术 |
+|------|------|
+| **前端** | 原生 HTML/CSS/JS，暗色主题 |
+| **后端** | FastAPI + SQLAlchemy |
+| **数据库** | MySQL（可选 SQLite） |
+| **浏览器采集** | Playwright（Firefox/Chromium） |
+| **LLM** | DeepSeek / OpenAI 兼容 API（可选） |
+| **评测** | Golden Set 自动评测框架 |
 
-- [Frontend API reference](docs/frontend-api-reference.md)
-- [Landing-page product brief](docs/landing-page-product-brief.md)
-- [Product MVP plan](docs/product-plan-mvp.md)
-- [Project handoff](docs/project-handoff-2026-06-18.md)
-- [Content strategy](docs/content-strategy.md)
+## 本地运行
 
-## Technology
-
-| Layer | Stack |
-|---|---|
-| Frontend | HTML, CSS, vanilla JavaScript |
-| Backend | FastAPI, Pydantic, SQLAlchemy |
-| Data | MySQL or SQLite |
-| Browser collection | Playwright |
-| AI | OpenAI-compatible model API with rule-based fallbacks |
-| Evaluation | Pytest and Golden Set evaluation |
-
-## Local setup
+### 1. 安装依赖
 
 ```bash
 pip install -r requirements.txt
-playwright install firefox
 ```
 
-Create `.env` from the example template:
+### 2. 安装 Playwright 浏览器
+
+```bash
+playwright install firefox
+# 或
+playwright install chromium
+```
+
+### 3. 配置环境变量
+
+从示例模板创建 `.env` 文件：
 
 ```bash
 cp .env.example .env
 ```
 
-Then edit `.env` and fill in your own API keys. You must register at the respective providers (DeepSeek, DashScope, AnySearch, etc.) and obtain your own keys. **Never commit your `.env` file.**
+然后编辑 `.env`，填入你自己的 API Key。你需要在对应的平台（DeepSeek、DashScope、AnySearch 等）自行注册并申请 Key。**请勿将 `.env` 文件提交到版本控制。**
 
-Key variables:
+主要变量说明：
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DATABASE_URL` | Yes | Database connection string (default: SQLite) |
-| `DEEPSEEK_API_KEY` | For AI analysis | DeepSeek API key for LLM-powered analysis |
-| `MODEL_BASE_URL` | Yes | LLM API base URL |
-| `MODEL_NAME` | Yes | LLM model name |
-| `DASHSCOPE_API_KEY` | Optional | For semantic embeddings |
-| `ANYSEARCH_API_KEY` | Optional | For web search |
+| 变量名 | 是否必需 | 说明 |
+|--------|----------|------|
+| `DATABASE_URL` | 是 | 数据库连接字符串（默认 SQLite） |
+| `DEEPSEEK_API_KEY` | AI 分析需要 | DeepSeek API Key，用于 LLM 分析 |
+| `MODEL_BASE_URL` | 是 | LLM API 地址 |
+| `MODEL_NAME` | 是 | LLM 模型名称 |
+| `DASHSCOPE_API_KEY` | 可选 | 用于语义向量嵌入 |
+| `ANYSEARCH_API_KEY` | 可选 | 用于联网搜索 |
 
-Start the service:
+### 4. 启动服务
 
 ```bash
 python main.py serve
 ```
 
-Then open:
+浏览器打开：
 
-- Landing page: `http://127.0.0.1:8000/`
-- Product workbench: `http://127.0.0.1:8000/app`
-- OpenAPI docs: `http://127.0.0.1:8000/docs`
+- 产品落地页：`http://127.0.0.1:8000/`
+- 功能工作台：`http://127.0.0.1:8000/app`
+- OpenAPI 文档：`http://127.0.0.1:8000/docs`
 
-## Validation
+### 5. 使用流程
+
+1. 从落地页点击“开始分析”，进入 `/app`
+2. **准备岗位**：展开采集面板 → 启动浏览器 → 登录 Boss → 设置岗位关键词与筛选条件 → 开始采集
+3. **解析简历**：粘贴简历或上传文件 → 识别候选人画像
+4. **差距分析**：生成五维适配报告与行动建议
+5. **历史报告**：查看或重新分析历史报告
+
+### 6. 运行评测
+
+**重要**：请确保使用项目实际安装依赖的 Python 环境，不要使用系统默认 Python。
 
 ```bash
+# 推荐测试命令（按顺序执行）
+
+# 1. 语法检查
 node --check ui/static/app.js
-python -m py_compile api/fastapi_app.py
+python -c "import py_compile; py_compile.compile('api/fastapi_app.py', doraise=True)"
+
+# 2. 运行测试（静默模式）
 pytest tests/ -q
+
+# 3. Golden Set 评测
 python eval/run_golden_eval.py
+
+# 4. 数据清理工具（预览模式）
+python scripts/clean_product_data.py --all-demo --dry-run
+
+# 5. 生成演示数据
+python scripts/seed_demo_data.py
 ```
 
-Use the project's actual virtual environment when running Python checks.
+**环境说明**：
+- 如果 `python` 指向系统默认路径（如 WindowsApps），请使用项目虚拟环境的 Python
+- 推荐使用 `venv` 或 `conda` 环境
+- 确保已安装 `requirements.txt` 中的依赖
 
-## Safety boundaries
+## 数据说明
 
-- JobLab does not submit applications automatically.
-- It does not bypass CAPTCHAs or recruitment-site risk controls.
-- Boss login remains inside the local persistent browser profile (`.boss_profile/`).
-- Uploaded source files are parsed locally and are not uploaded to the JobLab maintainer. When AI analysis is enabled, resume text and structured profiles may be sent to your configured LLM provider — review that provider's privacy and data retention policy. Without an API key, JobLab falls back to rule-based analysis.
-- Runtime data, browser profiles, databases, uploaded resumes, generated output, and IDE settings are excluded from Git.
+### 数据库
 
-## Repository layout
+- 默认使用 MySQL，可通过 `DATABASE_URL` 切换 SQLite
+- 表结构自动创建，无需手动建表
+- 本地数据库文件不要提交到 Git
 
-```text
-api/                 FastAPI routes
-services/            JD collection, profile extraction, and fit analysis
-ui/static/           Product MVP workbench
-models/              SQLAlchemy models
-agents/ and graphs/  Compatible agent workflows
-eval/                Golden Set evaluation
-scripts/             Maintenance and demo-data tools
-tests/               Automated tests
-docs/                Product and integration documentation
+### 浏览器 Profile
+
+- Playwright 浏览器 profile 保存在 `.boss_profile/` 目录
+- 包含登录状态，不要提交到 Git
+- 删除 `.boss_profile/` 可重置登录状态
+
+### 敏感文件
+
+以下文件不应提交到 Git：
+- `.env` — 环境变量和 API 密钥
+- `data/` — 运行时数据（ChromaDB、缓存等）
+- `.boss_profile/` — 浏览器 profile
+- `*.db` / `*.sqlite` — 数据库文件
+- 上传的简历文件
+- `output/` — 本地生成文件
+- `.idea/` / `*.iml` — IDE 配置
+
+## 安全边界
+
+- **不自动投递**：系统只采集和分析，不自动投递简历
+- **不绕过验证码**：遇到验证码/风控时暂停，提示用户手动处理
+- **不保存账号密码**：Boss 登录状态保存在本地浏览器 profile（`.boss_profile/`），不上传服务器
+- **简历数据处理**：原始上传文件仅在本地解析，不会上传给 JobLab 项目维护者；启用 AI 分析时，简历文本和结构化画像可能发送至用户自行配置的 LLM 服务商，请查看对应服务商的隐私和数据保留政策；不配置模型密钥时使用规则兜底
+- **仅用于主动分析**：用户主动触发采集和分析，不自动运行
+
+## 数据清理
+
+```bash
+# 预览将清理的数据
+python scripts/clean_product_data.py --job-name "Python后端" --dry-run
+
+# 确认清理
+python scripts/clean_product_data.py --job-name "Python后端" --confirm
+
+# 清理所有演示数据
+python scripts/clean_product_data.py --all-demo --confirm
 ```
 
-Current stable frontend milestone: `product-mvp-v0.41`.
+## 演示数据
 
-## Contributing and Feedback
+```bash
+# 生成演示数据（可重复运行，不会重复插入）
+python scripts/seed_demo_data.py
 
-- Found a bug? [Open an Issue](https://github.com/babanooi/JobSearch/issues)
-- Like the project? Give it a ⭐ to show support
-- Security concerns? See [SECURITY.md](SECURITY.md)
+# 先清理再生成
+python scripts/seed_demo_data.py --clean
+```
 
-## Disclaimer
+生成内容：
+- 1 个演示用户
+- 2 条演示 JD
+- 1 个岗位画像
+- 1 个候选人画像
+- 1 个适配分析报告
 
-- JobLab does **not** guarantee interview invitations or job offers.
-- JobLab does **not** automatically submit applications on your behalf.
-- JobLab does **not** bypass any platform's anti-bot protections.
-- JobLab is a **personal analysis tool**, not a job application automation service.
+## 常见问题
+
+### 浏览器未登录
+
+点击"启动浏览器"后，在弹出的浏览器中手动登录 Boss 直聘，然后点击"我已完成登录，重试采集"。
+
+### Boss 风控
+
+Boss 直聘反爬严格，遇到风控时：
+1. 在浏览器中手动完成验证
+2. 等待几分钟后重试
+3. 或使用手动粘贴 JD 文本的方式
+
+### 采集到 JD 但画像为空
+
+可能是 JD 质量不达标被过滤。尝试：
+1. 增加采集数量
+2. 手动粘贴更完整的 JD 文本
+3. 检查 JD 是否包含"岗位职责"和"任职要求"段落
+
+### 历史报告刷新丢失
+
+历史报告保存在服务器数据库中，刷新页面后需要重新加载。切换到"历史报告"Tab 会自动加载。
+
+### 旧数据污染如何清理
+
+```bash
+# 查看将清理的数据
+python scripts/clean_product_data.py --job-name "旧岗位名" --dry-run
+
+# 确认清理
+python scripts/clean_product_data.py --job-name "旧岗位名" --confirm
+```
+
+## 项目结构
+
+```
+JobSearch/
+├── main.py                     # CLI 入口
+├── api/fastapi_app.py          # FastAPI 服务
+├── ui/static/                  # 前端静态文件
+│   ├── index.html
+│   ├── app.js
+│   └── style.css
+├── services/                   # 业务服务
+│   ├── boss_browser_capture.py # Playwright 浏览器采集
+│   ├── boss_capture_service.py # Boss 采集服务
+│   ├── job_profile_service.py  # 岗位画像提取
+│   ├── candidate_profile_service.py # 候选人画像提取
+│   ├── fit_analysis_service.py # 适配分析
+│   └── profile_schemas.py      # Pydantic schemas
+├── models/                     # SQLAlchemy 模型
+├── agents/                     # LLM 智能体
+├── tools/                      # 工具函数
+├── eval/                       # 评测框架
+│   ├── golden_set_v1.json      # Golden Set 标注
+│   └── run_golden_eval.py      # 评测脚本
+├── scripts/                    # 运维脚本
+│   ├── clean_product_data.py   # 数据清理
+│   └── seed_demo_data.py       # 演示数据
+└── tests/                      # 测试
+```
+
+## 版本历史
+
+- v0.41 — 落地页与功能工作台接入、Product MVP UI、组合岗位采集筛选
+- v0.40 — 岗位采集桌面 Web 排版优化
+- v0.39 — 五维差距报告与功能工作台视觉重构
+- v0.34 — 上线前工程化整理、演示数据、数据清理工具
+- v0.33 — learning_plan 校准
+- v0.32 — 适配分析质量校准
+- v0.31 — 适配分析质量评测
+- v0.30 — 候选人画像质量评测
+- v0.29 — nice_to_have 提取修复
+- v0.28 — 岗位画像质量可观测化
+- v0.27 — 岗位画像质量提升
+- v0.26 — tab 式工作台 + 采集自动生成画像
+- v0.25 — Boss 浏览器采集
+
+## 反馈与支持
+
+- 发现 Bug？[提交 Issue](https://github.com/babanooi/JobSearch/issues)
+- 觉得有用？点个 ⭐ 支持一下
+- 安全问题？请查看 [SECURITY.md](SECURITY.md)
+
+## 免责声明
+
+- JobLab **不保证**获得面试邀请或 Offer。
+- JobLab **不会**自动投递简历。
+- JobLab **不会**绕过任何平台的反爬机制。
+- JobLab 是**个人分析工具**，不是求职自动投递服务。
