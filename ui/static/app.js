@@ -112,7 +112,6 @@ const $=id=>document.getElementById(id);
 const el={
   chatInput:$('chatInput'),btnSend:$('btnSend'),msgList:$('messageList'),
   convList:$('convList'),btnNewChat:$('btnNewChat'),
-  radarInput:$('radarInput'),btnRadarSearch:$('btnRadarSearch'),radarQuickTags:$('radarQuickTags'),radarBody:$('radarBody'),
   gapJobInput:$('gapJobInput'),btnGapLoad:$('btnGapLoad'),gapQuickTags:$('gapQuickTags'),gapSkillList:$('gapSkillList'),
   gapMarketMeta:$('gapMarketMeta'),gapExtraInput:$('gapExtraInput'),btnGapAnalyze:$('btnGapAnalyze'),btnGapClear:$('btnGapClear'),gapResult:$('gapResult'),
   btnGapClearFeedback:$('btnGapClearFeedback'),resumeTextInput:$('resumeTextInput'),resumeFileInput:$('resumeFileInput'),
@@ -134,19 +133,20 @@ const el={
 
 // ── 视图切换 ──
 function switchView(v){
+  if(v==='radar')v='dashboard'; // 旧 radar 状态自动迁移到 dashboard
   currentView=v;
   localStorage.setItem('js_current_view',v);
   document.querySelectorAll('.nav-icon').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
   document.querySelectorAll('.view').forEach(vw=>vw.classList.remove('active'));
-  const viewMap={chat:'viewChat',radar:'viewRadar',gap:'viewGap',user:'viewUser'};
+  const viewMap={chat:'viewChat',gap:'viewGap',user:'viewUser',dashboard:'viewDashboard'};
   const tgt=document.getElementById(viewMap[v]||'viewGap');
   if(tgt)tgt.classList.add('active');
   const workspaceTitle=$('workspaceTitle');
-  const viewTitle={gap:'求职适配分析',radar:'岗位技能雷达',user:'用户与数据'};
+  const viewTitle={gap:'求职适配分析',user:'用户与数据',dashboard:'岗位数据看板'};
   if(workspaceTitle)workspaceTitle.textContent=viewTitle[v]||'求职适配分析';
-  if(v==='radar')loadRadarQuickTags();
   if(v==='gap'){loadGapQuickTags();loadFitReportHistory();updateGapStepper();}
   if(v==='user')loadUserCenter();
+  if(v==='dashboard' && typeof loadDashboard==='function')loadDashboard();
 }
 document.querySelectorAll('.nav-icon').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
 
@@ -275,73 +275,7 @@ async function deleteConversation(tid){
 }
 
 // ═══════════════════════════════════════════════
-// 视图2: 技能雷达
-// ═══════════════════════════════════════════════
-async function loadRadarQuickTags(){
-  const jobs=await api.analyzedJobs();if(!jobs.length)return;
-  el.radarQuickTags.innerHTML=jobs.slice(0,8).map(j=>'<span class="quick-tag" data-job="'+esc(j)+'">'+esc(j)+'</span>').join('');
-  el.radarQuickTags.querySelectorAll('.quick-tag').forEach(t=>t.addEventListener('click',()=>{el.radarInput.value=t.dataset.job;runRadar();}));
-}
-async function runRadar(){
-  const job=el.radarInput.value.trim();if(!job)return;
-  el.radarBody.style.alignItems='center';el.radarBody.style.justifyContent='center';
-  el.radarBody.innerHTML='<div class="msg-loading"></div>';
-  const result=await fetch('/skill_rank/'+encodeURIComponent(job)+'?top_n=12');
-  const resData=await result.json();
-  const skills=resData.data||[];
-  const total=resData.total_jds||0;
-  const lastUpdate=resData.last_update||'';
-  if(!skills.length){el.radarBody.style.alignItems='center';el.radarBody.style.justifyContent='center';el.radarBody.innerHTML='<div class="radar-empty">未找到该岗位数据，先在对话中分析它</div>';return;}
-  const max=skills[0]?.count||1;
-  let h='<div class="radar-results"><div class="radar-chart-container"><canvas id="radarCanvas" width="240" height="240"></canvas></div><div class="radar-ranking"><div class="radar-job-title">'+esc(job)+' 技能雷达</div>';
-  skills.forEach((s,i)=>{
-    const count=Number(s.count)||0;
-    const pct=max>0?Math.min(Math.round(count/max*100),100):0;
-    const cls=pct>60?'hot':pct>30?'warm':'cool';
-    const trend='flat';
-    const trendIcon={up:'↑',down:'↓',flat:'→'},trendCls={up:'up',down:'down',flat:'flat'};
-    h+='<div class="rank-row-radar"><span class="rank-num">#'+(i+1)+'</span><span class="rank-skill">'+esc(s.skill)+'</span><span class="rank-bar-wrap"><span class="rank-bar-inner '+cls+'" style="width:'+pct+'%"></span></span><span class="rank-count-text">'+count+'次</span><span class="rank-trend '+trendCls[trend]+'">'+trendIcon[trend]+'</span></div>';
-  });
-  h+='</div></div>';
-  // 数据来源：total_jds>0 才展示具体数字，否则不展示
-  if(total||lastUpdate){
-    const parts=[];
-    if(total)parts.push('基于 <b>'+total+'</b> 条JD');
-    if(lastUpdate)parts.push('更新于 '+lastUpdate);
-    h+='<div class="radar-source-bar">'+parts.join(' · ')+'</div>';
-  }
-  el.radarBody.innerHTML=h;
-  el.radarBody.style.alignItems='flex-start';el.radarBody.style.justifyContent='flex-start';
-  drawRadarChart(skills.slice(0,8),max);
-}
-function drawRadarChart(skills,max){
-  const cv=document.getElementById('radarCanvas');if(!cv)return;
-  const ctx=cv.getContext('2d'),cx=120,cy=120,r=90,n=skills.length;
-  ctx.clearRect(0,0,240,240);
-  // 网格
-  for(let l=1;l<=4;l++){ctx.beginPath();for(let i=0;i<n;i++){const a=Math.PI*2/n*i-Math.PI/2;const x=cx+Math.cos(a)*r*l/4,y=cy+Math.sin(a)*r*l/4;i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}ctx.closePath();ctx.strokeStyle='rgba(255,255,255,0.06)';ctx.stroke();}
-  // 轴线
-  for(let i=0;i<n;i++){const a=Math.PI*2/n*i-Math.PI/2;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r);ctx.strokeStyle='rgba(255,255,255,0.04)';ctx.stroke();}
-  // 数据区域
-  ctx.beginPath();
-  for(let i=0;i<n;i++){const v=skills[i].count/max,a=Math.PI*2/n*i-Math.PI/2,x=cx+Math.cos(a)*r*v,y=cy+Math.sin(a)*r*v;i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
-  ctx.closePath();ctx.fillStyle='rgba(59,130,246,0.12)';ctx.fill();ctx.strokeStyle='#3b82f6';ctx.lineWidth=1.5;ctx.stroke();
-  // 顶点 & 标签
-  for(let i=0;i<n;i++){const v=skills[i].count/max,a=Math.PI*2/n*i-Math.PI/2,x=cx+Math.cos(a)*r*v,y=cy+Math.sin(a)*r*v;ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fillStyle='#3b82f6';ctx.fill();const lx=cx+Math.cos(a)*(r+20),ly=cy+Math.sin(a)*(r+20);ctx.fillStyle='#e8eaed';ctx.font='9px Inter,Noto Sans SC';ctx.textAlign='center';ctx.fillText(skills[i].skill.slice(0,6),lx,ly);}
-}
-el.btnRadarSearch.addEventListener('click',runRadar);
-el.radarInput.addEventListener('keydown',e=>{if(e.key==='Enter')runRadar();});
-
-// ── 雷达标签折叠 ──
-$('radarTagsToggle').addEventListener('click',()=>{
-  const tags=$('radarQuickTags');
-  const toggle=$('radarTagsToggle');
-  tags.classList.toggle('collapsed');
-  toggle.classList.toggle('open');
-});
-
-// ═══════════════════════════════════════════════
-// 视图3: 技能差距
+// 视图2: 技能差距
 // ═══════════════════════════════════════════════
 let gapMarketSkills=[],gapTotalJds=0,gapCurrentJob='',gapJobProfile=null,userProfileSkills=[];
 
@@ -2019,6 +1953,6 @@ el.btnNewChat.addEventListener('click',()=>{threadId=crypto.randomUUID();allMess
     loadFitReportHistory();
   }else{
     const savedView=localStorage.getItem('js_current_view');
-    switchView(savedView==='radar'||savedView==='user'?savedView:'gap');
+    switchView(['user','dashboard'].includes(savedView)?savedView:'gap');
   }
 })();

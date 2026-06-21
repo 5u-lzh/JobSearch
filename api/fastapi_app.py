@@ -1054,3 +1054,455 @@ def analyze_job(request: JobRequest):
         "elapsed": f"{elapsed:.1f}s",
         "thread_id": thread_id,
     }
+
+
+# ═══ v0.42 岗位数据看板 ═══
+
+
+def _normalize_job_type(raw: str | None) -> str:
+    """统一岗位类型分类，不修改数据库原始数据。"""
+    if not raw or not raw.strip():
+        return "未分类"
+    v = raw.strip().lower()
+    if v in ("unknown", "未知", ""):
+        return "未分类"
+    if v in ("正式", "全职"):
+        return "全职"
+    if v == "实习":
+        return "实习"
+    if v == "校招":
+        return "校招"
+    return raw.strip()
+
+
+def _build_dashboard_filters(
+    job_keyword: str, job_type: str, start_date: str, end_date: str
+) -> tuple[dict, list[str], str | None]:
+    """校验并构建筛选条件。返回 (params, scope_notes, error)。"""
+    import re
+    from datetime import datetime
+
+    params: dict = {}
+    scope_notes: list[str] = []
+    kw = job_keyword.strip()
+    jt = job_type.strip()
+    sd = start_date.strip()
+    ed = end_date.strip()
+
+    if kw:
+        params["keyword"] = f"%{kw}%"
+        scope_notes.append("岗位关键词影响 JD、画像和技能指标")
+
+    if jt:
+        params["job_type_filter"] = jt
+        scope_notes.append("岗位类型仅影响画像类型分布")
+
+    date_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+    if sd:
+        if not date_pattern.match(sd):
+            return params, scope_notes, "start_date 格式无效，需 YYYY-MM-DD"
+        params["start_date"] = sd
+    if ed:
+        if not date_pattern.match(ed):
+            return params, scope_notes, "end_date 格式无效，需 YYYY-MM-DD"
+        params["end_date"] = ed
+    if sd and ed:
+        try:
+            if datetime.strptime(sd, "%Y-%m-%d") > datetime.strptime(ed, "%Y-%m-%d"):
+                return params, scope_notes, "start_date 不能晚于 end_date"
+        except ValueError:
+            return params, scope_notes, "日期格式无效"
+    if sd or ed:
+        scope_notes.append("时间范围影响 JD 和画像指标（基于 fetched_at / created_at）")
+
+    return params, scope_notes, None
+
+
+def _build_where_clauses(params: dict) -> tuple[str, str, str]:
+    """根据筛选参数构建三组 WHERE 子句片段。
+    返回 (jd_where, profile_where, skill_where) 及各自的绑定参数。
+    """
+    jd_clauses = []
+    profile_clauses = []
+    skill_clauses = []
+
+    if "keyword" in params:
+        jd_clauses.append("AND job_name LIKE :keyword")
+        profile_clauses.append("AND job_name LIKE :keyword")
+        skill_clauses.append("AND job_name LIKE :keyword")
+    if "start_date" in params:
+        jd_clauses.append("AND fetched_at >= :start_date")
+        profile_clauses.append("AND created_at >= :start_date")
+    if "end_date" in params:
+        jd_clauses.append("AND fetched_at < DATE_ADD(:end_date, INTERVAL 1 DAY)")
+        profile_clauses.append("AND created_at < DATE_ADD(:end_date, INTERVAL 1 DAY)")
+
+    return (
+        " ".join(jd_clauses),
+        " ".join(profile_clauses),
+        " ".join(skill_clauses),
+    )
+
+
+def _build_insights(top_jobs, type_dist, skill_heatmap, kpis) -> list[dict]:
+    """根据聚合结果生成最多 3 条数据洞察。"""
+    insights = []
+
+    if top_jobs:
+        t = top_jobs[0]
+        insights.append({
+            "icon": "📊",
+            "text": f"当前采集量最高的岗位是 {t['job_name']}，共 {t['jd_count']} 条 JD",
+        })
+
+    total_profiles = sum(d["count"] for d in type_dist) if type_dist else 0
+    fulltime_count = sum(d["count"] for d in type_dist if d["type"] == "全职") if type_dist else 0
+    if total_profiles > 0:
+        pct = round(fulltime_count / total_profiles * 100)
+        if pct > 0:
+            insights.append({
+                "icon": "💼",
+                "text": f"全职岗位占岗位画像的 {pct}%",
+            })
+
+    if skill_heatmap:
+        s = skill_heatmap[0]
+        insights.append({
+            "icon": "🔥",
+            "text": f"{s['skill']} 是覆盖岗位最多的技能之一（覆盖 {s['jobs']} 个岗位）",
+        })
+
+    return insights[:3]
+
+
+@app.get("/dashboard/overview")
+def dashboard_overview(
+    job_keyword: str = Query(""),
+    job_type: str = Query(""),
+    start_date: str = Query(""),
+    end_date: str = Query(""),
+):
+    """返回看板所需的全部聚合数据，支持可选筛选。"""
+    from models.database import SessionLocal
+    from sqlalchemy import text
+
+    # 校验筛选参数
+    params, scope_notes, err = _build_dashboard_filters(
+        job_keyword, job_type, start_date, end_date
+    )
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+
+    jd_where, profile_where, skill_where = _build_where_clauses(params)
+    type_filter = params.get("job_type_filter", "")
+
+    with SessionLocal() as session:
+        # ── KPI ──
+        jd_count = session.execute(
+            text(f"SELECT COUNT(*) FROM jd_documents WHERE 1=1 {jd_where}"), params
+        ).scalar() or 0
+
+        profile_count = session.execute(
+            text(f"SELECT COUNT(*) FROM job_profiles WHERE 1=1 {profile_where}"), params
+        ).scalar() or 0
+
+        skill_count = session.execute(
+            text(f"SELECT COUNT(DISTINCT skill_name) FROM job_skills WHERE 1=1 {skill_where}"), params
+        ).scalar() or 0
+
+        report_count = session.execute(
+            text("SELECT COUNT(*) FROM fit_analysis_reports"), {}
+        ).scalar() or 0
+
+        # ── Top 10 岗位 ──
+        top_jobs_rows = session.execute(text(
+            f"SELECT job_name, COUNT(*) as cnt FROM jd_documents "
+            f"WHERE 1=1 {jd_where} GROUP BY job_name ORDER BY cnt DESC LIMIT 10"
+        ), params).fetchall()
+        top_jobs = [{"job_name": r[0], "jd_count": r[1]} for r in top_jobs_rows]
+
+        # ── 岗位类型分布（清洗后） ──
+        type_rows = session.execute(text(
+            f"SELECT job_type FROM job_profiles WHERE 1=1 {profile_where}"
+        ), params).fetchall()
+        type_counter: dict[str, int] = {}
+        for r in type_rows:
+            normalized = _normalize_job_type(r[0])
+            type_counter[normalized] = type_counter.get(normalized, 0) + 1
+        # 如果有类型筛选，只保留匹配的
+        if type_filter:
+            type_counter = {k: v for k, v in type_counter.items() if k == type_filter}
+        job_type_distribution = [{"type": k, "count": v} for k, v in sorted(
+            type_counter.items(), key=lambda x: -x[1]
+        )]
+
+        # ── 技能热度 ──
+        skill_rows = session.execute(text(
+            f"SELECT skill_name, SUM(count) as total_count, COUNT(DISTINCT job_name) as job_cnt "
+            f"FROM job_skills WHERE 1=1 {skill_where} "
+            f"GROUP BY skill_name ORDER BY total_count DESC LIMIT 30"
+        ), params).fetchall()
+        skill_heatmap = [
+            {"skill": r[0], "count": int(r[1] or 0), "jobs": int(r[2] or 0)}
+            for r in skill_rows
+        ]
+
+        # ── 适配分分布 ──
+        score_ranges = [(0, 20), (20, 40), (40, 60), (60, 80), (80, 101)]
+        fit_score_distribution = []
+        for low, high in score_ranges:
+            label = f"{low}-{high - 1}" if high <= 100 else f"{low}-100"
+            cnt = session.execute(text(
+                "SELECT COUNT(*) FROM fit_analysis_reports "
+                "WHERE overall_score >= :low AND overall_score < :high"
+            ), {"low": low, "high": high}).scalar() or 0
+            fit_score_distribution.append({"range": label, "count": cnt})
+
+        # ── 适配等级分布 ──
+        level_rows = session.execute(text(
+            "SELECT COALESCE(overall_fit_level, '未知') as lvl, COUNT(*) as cnt "
+            "FROM fit_analysis_reports GROUP BY lvl"
+        )).fetchall()
+        fit_level_distribution = [{"level": r[0], "count": r[1]} for r in level_rows]
+
+        # ── 更新时间 ──
+        max_fetched = session.execute(
+            text("SELECT MAX(fetched_at) FROM jd_documents")
+        ).scalar()
+        updated_at = max_fetched.strftime("%Y-%m-%d %H:%M") if max_fetched else "更新时间暂不可用"
+
+    # ── 洞察 ──
+    insights = _build_insights(top_jobs, job_type_distribution, skill_heatmap,
+                               {"jd_count": jd_count, "profile_count": profile_count})
+
+    return {
+        "code": 200,
+        "meta": {
+            "source": "JobLab MySQL",
+            "updated_at": updated_at,
+            "filters": {
+                "job_keyword": job_keyword.strip(),
+                "job_type": job_type.strip(),
+                "start_date": start_date.strip(),
+                "end_date": end_date.strip(),
+            },
+            "filter_scope_notes": scope_notes,
+        },
+        "kpis": {
+            "jd_count": jd_count,
+            "profile_count": profile_count,
+            "skill_count": skill_count,
+            "report_count": report_count,
+        },
+        "top_jobs": top_jobs,
+        "job_type_distribution": job_type_distribution,
+        "skill_heatmap": skill_heatmap,
+        "fit_score_distribution": fit_score_distribution,
+        "fit_level_distribution": fit_level_distribution,
+        "insights": insights,
+    }
+
+
+@app.get("/dashboard/skill_trend")
+def dashboard_skill_trend(job_name: str = Query("")):
+    """返回指定岗位的技能热度排名"""
+    if not job_name or not job_name.strip():
+        raise HTTPException(status_code=400, detail="job_name 不能为空")
+    from models.database import SessionLocal
+    from sqlalchemy import text
+
+    job_name_norm = normalize_job_name(job_name)
+    with SessionLocal() as session:
+        rows = session.execute(text(
+            "SELECT skill_name, count, last_seen_at FROM job_skills "
+            "WHERE job_name = :job ORDER BY count DESC LIMIT 20"
+        ), {"job": job_name_norm}).fetchall()
+
+        skills = [
+            {
+                "skill": r[0],
+                "count": r[1],
+                "last_seen": r[2].strftime("%Y-%m-%d") if r[2] else "",
+            }
+            for r in rows
+        ]
+
+    return {"code": 200, "job_name": job_name_norm, "skills": skills}
+
+
+def _extract_skill_excerpt(raw_text: str, skill_name: str, max_length: int = 220) -> str:
+    """从 JD 原文中截取包含技能词的一句上下文。"""
+    import re
+
+    text_value = (raw_text or "").strip()
+    skill_value = (skill_name or "").strip()
+    if not text_value or not skill_value:
+        return ""
+
+    normalized = re.sub(r"\r\n?", "\n", text_value)
+    sentences = re.split(r"(?<=[。！？!?；;])\s*|\n+", normalized)
+    skill_lower = skill_value.lower()
+    sentence = next(
+        (item.strip(" \t-•·、") for item in sentences if skill_lower in item.lower()),
+        "",
+    )
+    if not sentence:
+        return ""
+    sentence = re.sub(r"\s+", " ", sentence).strip()
+    if len(sentence) <= max_length:
+        return sentence
+
+    index = sentence.lower().find(skill_lower)
+    start = max(0, index - max_length // 3)
+    end = min(len(sentence), start + max_length)
+    excerpt = sentence[start:end].strip()
+    return ("…" if start > 0 else "") + excerpt + ("…" if end < len(sentence) else "")
+
+
+@app.get("/dashboard/skill_evidence")
+def dashboard_skill_evidence(
+    skill_name: str = Query(""),
+    job_name: str = Query(""),
+):
+    """返回一条真实 JD 中包含指定技能词的文本证据。"""
+    if not skill_name or not skill_name.strip():
+        raise HTTPException(status_code=400, detail="skill_name 不能为空")
+
+    from models.database import SessionLocal
+    from sqlalchemy import text
+
+    skill_value = skill_name.strip()
+    job_value = job_name.strip()
+    params = {"skill_pattern": f"%{skill_value}%"}
+    job_clause = ""
+    if job_value:
+        params["job_pattern"] = f"%{normalize_job_name(job_value)}%"
+        job_clause = "AND job_name LIKE :job_pattern"
+
+    with SessionLocal() as session:
+        rows = session.execute(text(
+            "SELECT job_name, title, company, raw_text, fetched_at "
+            "FROM jd_documents "
+            "WHERE raw_text LIKE :skill_pattern "
+            f"{job_clause} "
+            "ORDER BY fetched_at DESC LIMIT 20"
+        ), params).fetchall()
+
+    for row in rows:
+        excerpt = _extract_skill_excerpt(row[3], skill_value)
+        if excerpt:
+            return {
+                "code": 200,
+                "skill": skill_value,
+                "evidence": {
+                    "excerpt": excerpt,
+                    "job_name": row[0] or "",
+                    "title": row[1] or "",
+                    "company": row[2] or "",
+                    "fetched_at": row[4].strftime("%Y-%m-%d") if row[4] else "",
+                },
+            }
+
+    return {"code": 200, "skill": skill_value, "evidence": None}
+
+
+@app.get("/dashboard/fit_level_detail")
+def dashboard_fit_level_detail(
+    level: str = Query(""),
+    limit: int = Query(6, ge=1, le=12),
+):
+    """返回指定适配等级的聚合指标与脱敏报告摘要。"""
+    import json
+    from models.database import SessionLocal
+    from models.profile import FitAnalysisReport, JobProfile
+    from sqlalchemy import func
+
+    level_value = (level or "").strip().lower()
+    if level_value not in {"strong", "moderate", "weak"}:
+        raise HTTPException(status_code=400, detail="level 必须是 strong、moderate 或 weak")
+
+    dimension_fields = [
+        ("capability_fit", "能力匹配"),
+        ("experience_relevance", "经历相关"),
+        ("growth_potential", "成长潜力"),
+        ("evidence_strength", "证据充分"),
+        ("risks_and_gaps", "风险控制"),
+    ]
+
+    def parse_json(value, fallback):
+        if isinstance(value, (dict, list)):
+            return value
+        try:
+            return json.loads(value or "")
+        except (json.JSONDecodeError, TypeError):
+            return fallback
+
+    with SessionLocal() as session:
+        query = session.query(FitAnalysisReport).filter(
+            FitAnalysisReport.overall_fit_level == level_value
+        )
+        total = query.count()
+        rows = query.order_by(FitAnalysisReport.created_at.desc()).limit(limit).all()
+        avg_score = query.with_entities(
+            func.avg(FitAnalysisReport.overall_score)
+        ).scalar() or 0
+
+        dimension_totals = {field: [] for field, _ in dimension_fields}
+        cards = []
+        complete_report_count = 0
+        for report in rows:
+            job_profile = session.get(JobProfile, report.job_profile_id)
+            report_has_detail = False
+            for field, _ in dimension_fields:
+                dimension = parse_json(getattr(report, field, ""), {})
+                score = dimension.get("score")
+                if isinstance(score, (int, float)):
+                    dimension_totals[field].append(float(score))
+                    report_has_detail = True
+
+            gaps = parse_json(report.gaps, [])
+            strengths = parse_json(report.strengths, [])
+            learning_plan = parse_json(report.learning_plan, [])
+            interview_strategy = parse_json(report.interview_strategy, [])
+            evidence_refs = parse_json(report.evidence_refs, [])
+            if report_has_detail or gaps or strengths or evidence_refs:
+                complete_report_count += 1
+
+            cards.append({
+                "id": report.id,
+                "job_name": job_profile.job_name if job_profile else "",
+                "score": round(float(report.overall_score or 0), 1),
+                "summary": report.fit_summary or "",
+                "strengths": strengths[:3],
+                "gaps": gaps[:3],
+                "learning_plan": learning_plan[:3],
+                "interview_strategy": interview_strategy[:3],
+                "evidence_refs": evidence_refs[:3],
+                "has_detail": bool(report_has_detail or gaps or strengths or evidence_refs),
+                "confidence": report.confidence or "",
+                "created_at": report.created_at.strftime("%Y-%m-%d %H:%M")
+                if report.created_at else "",
+            })
+
+    dimensions = [
+        {
+            "key": field,
+            "label": label,
+            "score": round(
+                sum(dimension_totals[field]) / len(dimension_totals[field]), 1
+            ) if dimension_totals[field] else 0,
+        }
+        for field, label in dimension_fields
+    ]
+
+    return {
+        "code": 200,
+        "level": level_value,
+        "total": total,
+        "average_score": round(float(avg_score), 1),
+        "complete_report_count": complete_report_count,
+        "completeness_rate": round(complete_report_count / len(rows) * 100)
+        if rows else 0,
+        "dimensions": dimensions,
+        "reports": cards,
+    }
