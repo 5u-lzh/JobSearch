@@ -266,7 +266,7 @@ JobSearch/
 
 ## 反馈与支持
 
-- 发现 Bug？[提交 Issue](https://github.com/babanooi/JobSearch/issues)
+- 发现 Bug？[提交 Issue](https://github.com/5u-lzh/JobSearch/issues)
 - 觉得有用？点个 ⭐ 支持一下
 - 安全问题？请查看 [SECURITY.md](SECURITY.md)
 

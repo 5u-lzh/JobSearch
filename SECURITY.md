@@ -12,8 +12,8 @@
 If you discover a security vulnerability in JobLab, please report it responsibly:
 
 1. **Do NOT open a public Issue** with vulnerability details, leaked keys, or resume data.
-2. Use [GitHub Private Vulnerability Reporting](https://github.com/babanooi/JobSearch/security/advisories/new) if available.
-3. Alternatively, contact the maintainer via the [GitHub profile](https://github.com/babanooi).
+2. Use [GitHub Private Vulnerability Reporting](https://github.com/5u-lzh/JobSearch/security/advisories/new) if available.
+3. Alternatively, contact the maintainer via the [GitHub profile](https://github.com/5u-lzh).
 
 We will acknowledge receipt as soon as possible. We do not guarantee a fixed response time.
 

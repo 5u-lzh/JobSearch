@@ -121,7 +121,7 @@ Current stable frontend milestone: `product-mvp-v0.41`.
 
 ## Contributing and Feedback
 
-- Found a bug? [Open an Issue](https://github.com/babanooi/JobSearch/issues)
+- Found a bug? [Open an Issue](https://github.com/5u-lzh/JobSearch/issues)
 - Like the project? Give it a ⭐ to show support
 - Security concerns? See [SECURITY.md](SECURITY.md)
 
