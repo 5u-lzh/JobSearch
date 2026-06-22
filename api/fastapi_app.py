@@ -460,7 +460,7 @@ def get_skill_rank(job_name: str, top_n: int = 10, user_id: int = Query(0)):
         item["community_rejected"] = item["reject_count"] >= 3
         item["community_important"] = item["important_count"] >= 3
 
-    last_update_str = last_update.strftime("%Y-%m-%d %H:%M") if last_update else ""
+    last_update_str = last_update if last_update else ""
     conf = estimate_market_confidence(rank, raw_count=len(raw_rank), total_jds=jd_total or 0)
 
     return {
@@ -1237,6 +1237,7 @@ def dashboard_overview(
         )]
 
         # ── 技能热度 ──
+        # 优先从 job_skills 表查询（旧分析管道的输出）
         skill_rows = session.execute(text(
             f"SELECT skill_name, SUM(count) as total_count, COUNT(DISTINCT job_name) as job_cnt "
             f"FROM job_skills WHERE 1=1 {skill_where} "
@@ -1246,6 +1247,36 @@ def dashboard_overview(
             {"skill": r[0], "count": int(r[1] or 0), "jobs": int(r[2] or 0)}
             for r in skill_rows
         ]
+        # 如果 job_skills 为空，从 job_profiles 的 JSON 字段兜底提取技能
+        if not skill_heatmap:
+            import json as _json
+            profile_rows = session.execute(text(
+                "SELECT job_name, must_have_capabilities, nice_to_have_capabilities FROM job_profiles"
+            )).fetchall()
+            skill_counter = {}
+            for row in profile_rows:
+                job_name = row[0] or "未知"
+                for field in [row[1], row[2]]:
+                    if not field:
+                        continue
+                    try:
+                        skills = _json.loads(field)
+                        if isinstance(skills, list):
+                            for s in skills:
+                                if isinstance(s, str) and s.strip():
+                                    key = s.strip()
+                                    if key not in skill_counter:
+                                        skill_counter[key] = {"count": 0, "jobs": set()}
+                                    skill_counter[key]["count"] += 1
+                                    skill_counter[key]["jobs"].add(job_name)
+                    except (_json.JSONDecodeError, TypeError):
+                        pass
+            # 按出现次数降序排列，取前30
+            sorted_skills = sorted(skill_counter.items(), key=lambda x: -x[1]["count"])[:30]
+            skill_heatmap = [
+                {"skill": name, "count": info["count"], "jobs": len(info["jobs"])}
+                for name, info in sorted_skills
+            ]
 
         # ── 适配分分布 ──
         score_ranges = [(0, 20), (20, 40), (40, 60), (60, 80), (80, 101)]
@@ -1269,7 +1300,7 @@ def dashboard_overview(
         max_fetched = session.execute(
             text("SELECT MAX(fetched_at) FROM jd_documents")
         ).scalar()
-        updated_at = max_fetched.strftime("%Y-%m-%d %H:%M") if max_fetched else "更新时间暂不可用"
+        updated_at = max_fetched if max_fetched else "更新时间暂不可用"
 
     # ── 洞察 ──
     insights = _build_insights(top_jobs, job_type_distribution, skill_heatmap,
@@ -1322,7 +1353,7 @@ def dashboard_skill_trend(job_name: str = Query("")):
             {
                 "skill": r[0],
                 "count": r[1],
-                "last_seen": r[2].strftime("%Y-%m-%d") if r[2] else "",
+                "last_seen": r[2] if r[2] else "",
             }
             for r in rows
         ]
@@ -1399,7 +1430,7 @@ def dashboard_skill_evidence(
                     "job_name": row[0] or "",
                     "title": row[1] or "",
                     "company": row[2] or "",
-                    "fetched_at": row[4].strftime("%Y-%m-%d") if row[4] else "",
+                    "fetched_at": row[4] if row[4] else "",
                 },
             }
 

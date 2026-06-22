@@ -20,7 +20,7 @@ def get_engine():
             echo=os.getenv("SQL_ECHO", "false").lower() == "true",
             pool_size=10,
             max_overflow=20,
-            connect_args={"charset": "utf8mb4"},
+            connect_args={"charset": "utf8mb4"} if settings.DATABASE_URL and not settings.DATABASE_URL.startswith("sqlite") else {},
         )
     return _engine
 

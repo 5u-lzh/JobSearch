@@ -1460,6 +1460,7 @@ async function viewFitReport(id){
     }
     currentJobProfile=jp;currentCandidateProfile=cp;currentFitReport=fitReport;
     renderProfileReport(jp,cp,fitReport);
+    switchGapTab('fit');
     loadFitReportHistory();
     // 在报告顶部加返回按钮
     const reportEl=$('gapResult');
