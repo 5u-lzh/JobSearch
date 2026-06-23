@@ -1023,7 +1023,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
   box-shadow:0 18px 44px rgba(0,0,0,.16);
 }
 
-#viewGap{padding:0 34px 42px;}
+#viewGap{padding:0 34px 18px;}
 .workbench-hero{
   display:grid;
   grid-template-columns:minmax(0,1.4fr) minmax(340px,.8fr);
@@ -1558,7 +1558,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
   .app-topbar{height:64px;padding:0 18px;}
   .topbar-meta .service-indicator{display:none;}
   .view,#viewUser{padding:22px 18px 30px;}
-  #viewGap{padding:0 18px 30px;}
+  #viewGap{padding:0 18px 14px;}
   .workbench-hero{padding:24px 0 18px;}
   .gap-tab-bar{display:flex;overflow-x:auto;padding-bottom:12px;}
   .capture-filter-row{grid-template-columns:repeat(2,minmax(0,1fr));}
