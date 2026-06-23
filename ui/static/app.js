@@ -1719,8 +1719,13 @@ if(el.btnResumeProfile)el.btnResumeProfile.addEventListener('click',extractResum
 document.querySelectorAll('.gap-tab').forEach(tab=>{
   tab.addEventListener('click',()=>switchGapTab(tab.dataset.tab));
 });
-// 文件选择时显示文件名
+// 文件选择时显示文件名（保存并恢复滚动位置，防止文件对话框关闭后页面跳顶）
 if(el.resumeFileInput){
+  el.resumeFileInput.addEventListener('click',()=>{
+    // 保存当前滚动位置
+    const viewGap=document.getElementById('viewGap');
+    if(viewGap) viewGap._savedScrollTop=viewGap.scrollTop;
+  });
   el.resumeFileInput.addEventListener('change',()=>{
     const f=el.resumeFileInput.files?.[0];
     const statusEl=$('resumeParseStatus');
@@ -1728,6 +1733,11 @@ if(el.resumeFileInput){
       statusEl.textContent='已选择: '+f.name+' ('+(f.size/1024).toFixed(0)+'KB)';
       statusEl.style.color='var(--text-dim)';
       parsedResumeText=''; // 新文件，清空旧解析文本
+      // 恢复滚动位置
+      const viewGap=document.getElementById('viewGap');
+      if(viewGap && viewGap._savedScrollTop!==undefined){
+        requestAnimationFrame(()=>{ viewGap.scrollTop=viewGap._savedScrollTop; });
+      }
     }
   });
 }
